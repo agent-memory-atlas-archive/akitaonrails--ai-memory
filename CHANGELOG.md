@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stopped at the line that sources it. The installer now also extracts
   `_lib.sh` from the verified archive into the install root, beside the agent
   directories, and refuses to continue when the archive does not contain it.
+  (#1184)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
