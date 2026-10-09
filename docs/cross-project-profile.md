@@ -179,7 +179,9 @@ is new since the last one.
   pasted into a prompt (only that block; your sentences around it still
   count). Your verbatim words are kept as evidence.
 - **Curated pages** of the project: `_rules/`, `decisions/`, `gotchas/` and
-  `procedures/`.
+  `procedures/`. A page contributes its `summary`, or else its first line of
+  prose; metadata fields such as `**Status:** Accepted` or `**Date:**` at the
+  top of an ADR are skipped.
 - **Stack signals**: the languages the project's activity shows (from file
   names such as `Cargo.toml` and source extensions).
 

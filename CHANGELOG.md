@@ -63,6 +63,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the placeholder id `empty-state-draft` and no workspace, and each launch
   appended another observation to that one empty session. The server now
   acknowledges and drops that placeholder.
+- Fixed `profile review` listing page metadata such as `Status:** Accepted` as
+  habits waiting for promotion: a curated page's statement was its first line
+  of prose, which on an ADR-style page is a `**Status:** Accepted` or
+  `**Date:**` field. Statements now skip fields with an ADR metadata label
+  (Status, Date, Deciders, Supersedes and the like) whatever their value; a
+  labelled rule such as `**Package manager:** pnpm` is still a statement.
+  Fields harvested before the fix no longer reach `profile review`; an entry already admitted to the
+  profile stays until `ai-memory profile forget`. (#1175)
 - Fixed `install-mcp --client claude-desktop` refusing to run on Linux:
   Anthropic ships Claude Desktop for Linux as a beta, and the command now
   writes `$XDG_CONFIG_HOME/Claude/claude_desktop_config.json` (default
