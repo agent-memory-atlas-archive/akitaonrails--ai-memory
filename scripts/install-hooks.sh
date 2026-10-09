@@ -143,6 +143,17 @@ if [[ "$AGENT" == "command-code" ]]; then
     )
 fi
 
+# Antigravity CLI wires only PreInvocation (session-start), PreToolUse,
+# PostToolUse and Stop, and its bundle ships exactly those four scripts.
+if [[ "$AGENT" == "antigravity-cli" ]]; then
+    SCRIPTS=(
+        "session-start"
+        "pre-tool-use"
+        "post-tool-use"
+        "stop"
+    )
+fi
+
 DEST="$TO/$AGENT"
 mkdir -p "$DEST"
 
