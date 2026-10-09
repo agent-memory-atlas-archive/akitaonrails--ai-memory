@@ -113,9 +113,10 @@ SCRIPTS=(
     "session-end"
 )
 
-# kimi-code also captures the subagent lifecycle (its bundle mirrors
-# hooks/claude-code/, which ships them); the default list omits them.
-if [[ "$AGENT" == "kimi-code" ]]; then
+# claude-code, grok and kimi-code also capture the subagent lifecycle: their
+# bundles ship subagent-start/stop and their hook config points at them. The
+# default list omits them.
+if [[ "$AGENT" == "claude-code" || "$AGENT" == "grok" || "$AGENT" == "kimi-code" ]]; then
     SCRIPTS+=("subagent-start" "subagent-stop")
 fi
 

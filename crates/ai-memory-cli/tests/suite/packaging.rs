@@ -2635,6 +2635,8 @@ mod slow {
             "session-end",
             "session-start",
             "stop",
+            "subagent-start",
+            "subagent-stop",
             "user-prompt-submit",
         ];
 
