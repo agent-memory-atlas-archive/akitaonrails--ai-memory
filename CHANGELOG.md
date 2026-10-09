@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fixed `move-project` leaving rows on the old workspace. Pending
+  cross-project messages (addressed to the project and sent by it), entities,
+  page feedback, session purge tombstones and the profile evidence were not
+  re-stamped with the project's other tables, so the moved project lost its
+  pending mail, its entity retrieval and open feedback findings, and a purged
+  session could be recreated. They now move in the same transaction.
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
