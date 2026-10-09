@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
   without `windowsHide`. The spawn now passes `windowsHide: true`, as
   the repo-root probe's two git spawns already do.
+- Fixed `AI_MEMORY_LLM_REASONING_EFFORT` being ignored for
+  `claude-haiku-5-5`: the Anthropic provider dropped effort and thinking
+  fields for every Haiku model because Haiku 4.5 rejects them, so Haiku 5.5
+  always ran adaptive thinking at its default `medium` effort. Haiku 5.5 and
+  later now receive `output_config.effort`, adaptive thinking, and
+  `thinking: disabled` for `none`, like the other current Claude models
+  (#1180).
 - Fixed Cursor tool calls being stored with no title or content: Cursor's own
   hooks, and the Claude Code hooks Cursor also runs, send Claude's
   `tool_name`/`tool_input` fields, but Cursor was missing from the tool-capture
