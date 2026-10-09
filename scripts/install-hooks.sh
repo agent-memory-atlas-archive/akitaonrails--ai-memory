@@ -172,6 +172,18 @@ if [[ -z "$expected_sum" || "$actual_sum" != "$expected_sum" ]]; then
     exit 1
 fi
 echo "Installing ai-memory hooks for $AGENT into $DEST"
+# Every event script sources _lib.sh from its own directory or the one above
+# it, so the helper goes beside the agent directories, where `install-hooks`
+# also looks when it stages a bundle. A script installed without it stops at
+# the line that sources it.
+source="$TMP/_lib.sh"
+if tar -xOf "$TMP/$ARCHIVE" "hooks/_lib.sh" > "$source" && [[ -s "$source" ]]; then
+    install -m 0644 "$source" "$TO/_lib.sh"
+    echo "  ✓ _lib"
+else
+    echo "  ✗ _lib (missing from verified release bundle)" >&2
+    exit 1
+fi
 for name in "${SCRIPTS[@]}"; do
     member="hooks/$AGENT/${name}.sh"
     source="$TMP/${name}.sh"
