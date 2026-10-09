@@ -33,7 +33,7 @@ use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 
 use crate::cli::{RunArgs, RunHarnessChoice};
-use crate::commands::{path_util, resolve_scope};
+use crate::commands::{path_util, resolve_scope_noting_marker_project};
 use crate::config::Config;
 use crate::http_client::{
     ServerEndpoint, ServerProbe, ServerResponseError, augment_connect_error, get_json, post_empty,
@@ -562,8 +562,11 @@ async fn run_once_with_wiring(
     // `default`, so a checkout whose marker declared another workspace put its
     // managed workstream in one scope while its hook-captured sessions went to
     // another — the same repository split in two.
-    let (workspace, project) =
-        resolve_scope(config, args.workspace.as_deref(), args.project.as_deref())?;
+    let (workspace, project, marker_project) = resolve_scope_noting_marker_project(
+        config,
+        args.workspace.as_deref(),
+        args.project.as_deref(),
+    )?;
     let interactive = io::stdin().is_terminal() && io::stderr().is_terminal();
     // Inside ai-jail every jail flag is moot (no nesting), so neither the
     // binary lookup nor its errors apply there.
@@ -656,7 +659,7 @@ async fn run_once_with_wiring(
         new_workstream: args.new_workstream,
         force_unlock,
         lease_owner: lease_owner(),
-        repository_identity: remote_identity_naming(&repository.cwd, &project),
+        repository_identity: remote_identity_naming(&repository.cwd, &project, marker_project),
     };
     let interrupted_before_spawn = CancellationToken::new();
     let interrupt_task = tokio::spawn(capture_interrupts(interrupted_before_spawn.clone()));
@@ -2379,8 +2382,12 @@ fn auto_session_dir(
 
 /// The checkout's git-remote identity when `project` is the name it derives,
 /// so the server can route the run by identity the way hook capture does. A
-/// name from `--project` or a marker that differs from it routes by name.
-fn remote_identity_naming(cwd: &Path, project: &str) -> Option<String> {
+/// name from `--project` that differs from it routes by name, and so does any
+/// name a marker's `project` key pinned: capture never reads the remote then.
+fn remote_identity_naming(cwd: &Path, project: &str, marker_project: bool) -> Option<String> {
+    if marker_project {
+        return None;
+    }
     crate::marker::discover_remote_identity(&cwd.to_string_lossy())
         .filter(|identity| {
             ai_memory_core::repository_identity::path_style_name(identity).as_deref()
@@ -3788,14 +3795,63 @@ mod tests {
             );
         }
         assert_eq!(
-            remote_identity_naming(&repo, "victorcesc-unknown-system").as_deref(),
+            remote_identity_naming(&repo, "victorcesc-unknown-system", false).as_deref(),
             Some("github.com/victorcesc/unknown-system")
         );
         // A folder-name, `--project`, or marker name routes by name alone.
-        assert_eq!(remote_identity_naming(&repo, "new-space-game"), None);
+        assert_eq!(remote_identity_naming(&repo, "new-space-game", false), None);
         assert_eq!(
-            remote_identity_naming(tmp.path(), "victorcesc-unknown-system"),
+            remote_identity_naming(tmp.path(), "victorcesc-unknown-system", false),
             None
+        );
+    }
+
+    /// Hook capture reads no remote once a marker's `project` key names the
+    /// project, so the run must not send one either, even when the pinned
+    /// name happens to equal the remote-derived one.
+    #[test]
+    fn run_sends_no_remote_identity_for_a_marker_pinned_project() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let repo = tmp.path().join("new-space-game");
+        std::fs::create_dir_all(&repo).unwrap();
+        for args in [
+            &["init", "-q"][..],
+            &[
+                "remote",
+                "add",
+                "origin",
+                "git@github.com:victorcesc/unknown-system.git",
+            ],
+        ] {
+            assert!(
+                std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(&repo)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        let config = Config {
+            runtime_env: crate::config::RuntimeEnv::with_host_cwd_for_tests(repo.to_str().unwrap()),
+            ..Config::default()
+        };
+        let identity_for = |marker: &str| {
+            std::fs::write(repo.join(".ai-memory.toml"), marker).unwrap();
+            let (_, project, marker_project) =
+                resolve_scope_noting_marker_project(&config, None, None).unwrap();
+            assert_eq!(project, "victorcesc-unknown-system");
+            remote_identity_naming(&repo, &project, marker_project)
+        };
+
+        assert_eq!(
+            identity_for("workspace = \"acme\"\nproject = \"victorcesc-unknown-system\"\n"),
+            None
+        );
+        // A marker that pins only the workspace leaves the name to the remote.
+        assert_eq!(
+            identity_for("workspace = \"acme\"\n").as_deref(),
+            Some("github.com/victorcesc/unknown-system")
         );
     }
 
