@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
   without `windowsHide`. The spawn now passes `windowsHide: true`, as
-  the repo-root probe's two git spawns already do.
+  the repo-root probe's two git spawns already do (#1169).
 - Fixed `AI_MEMORY_LLM_REASONING_EFFORT` being ignored for
   `claude-haiku-5-5`: the Anthropic provider dropped effort and thinking
   fields for every Haiku model because Haiku 4.5 rejects them, so Haiku 5.5
