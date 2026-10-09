@@ -501,8 +501,10 @@ a low-level re-stamp:
 6. Re-stamp `workspace_id` across every domain table for the project in
    **one transaction**, keeping the same `project_id`
    (`projects`, `pages`, `sessions`, `observations`, `handoffs`, `audit_log`,
-   auto-improvement state, SessionEnd consolidation jobs, and managed
-   `workstreams`). Native workstream sessions, runs, and events remain attached
+   auto-improvement state, SessionEnd consolidation jobs, managed
+   `workstreams`, pending cross-project messages on both ends, entities, page
+   feedback, purge tombstones, and the profile evidence). Native workstream
+   sessions, runs, and events remain attached
    through `workstream_id`; `page_embeddings` and `links` remain attached
    through `page_id`, so none of those rows need a direct re-stamp.
 
