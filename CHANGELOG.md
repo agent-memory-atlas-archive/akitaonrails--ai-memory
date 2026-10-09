@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them, but Kiro was missing from the tool-capture mapping, so every Kiro tool
   observation reached the store with a generic title and an empty body. They
   now get the same tool-family title and output summary as Claude Code's.
+  (#1187)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
