@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   later now receive `output_config.effort`, adaptive thinking, and
   `thinking: disabled` for `none`, like the other current Claude models
   (#1180).
+- Documented that Anthropic currently refuses Claude Free/Pro/Max subscription
+  tokens from third-party apps, so `anthropic-oauth` usually fails with a
+  `429 rate_limit_error` on every request. That is a policy refusal, not a
+  real rate limit; the docs now point to the `anthropic` provider with a
+  Console API key or another provider. Also corrected the claim that
+  `claude setup-token` writes `CLAUDE_CODE_OAUTH_TOKEN`: it only prints the
+  token, which you export yourself. (#1170)
+- Documented that Zero runs hook commands inside its sandbox, whose default
+  policy blocks network (loopback included) and writes outside the
+  workspace, so hook events stay in the spool instead of reaching the
+  server. The `install-hooks --agent zero` and `setup-agent` notes and the
+  Zero install docs now name the global `~/.config/zero/config.json`
+  `sandbox` keys that allow delivery, their tradeoff, and the
+  `ai-memory hook-drain` fallback. (#1172)
 - Fixed Cursor tool calls being stored with no title or content: Cursor's own
   hooks, and the Claude Code hooks Cursor also runs, send Claude's
   `tool_name`/`tool_input` fields, but Cursor was missing from the tool-capture
