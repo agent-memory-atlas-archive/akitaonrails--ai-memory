@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
+  Pi, OpenClaw) flashing a console window on Windows.
+  `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
+  without `windowsHide`. The spawn now passes `windowsHide: true`, as
+  the repo-root probe's two git spawns already do.
 - Fixed Cursor tool calls being stored with no title or content: Cursor's own
   hooks, and the Claude Code hooks Cursor also runs, send Claude's
   `tool_name`/`tool_input` fields, but Cursor was missing from the tool-capture
