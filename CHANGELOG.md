@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fixed a purged session coming back. `purge-session` leaves a tombstone so a
+  late event cannot recreate the session, but live hook ingest creates its
+  session row on a path that never checked it, so the next event for a purged
+  session brought back the session and a new observation. Hook ingest now
+  refuses it, and the delivery is acknowledged as `dropped_invalid` instead of
+  failing and being retried from the client's spool.
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
