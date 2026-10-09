@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   spooled, and their spool drain deleted each queued entry it met on such a
   response. Both now keep `408`, `425`, `429` and every `5xx` for a later
   drain, as the shell, PowerShell and native hooks already do. Re-run
-  `install-hooks --apply` for the agent to regenerate its plugin.
+  `install-hooks --apply` for the agent to regenerate its plugin. (#1188)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
