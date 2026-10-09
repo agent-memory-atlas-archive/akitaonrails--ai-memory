@@ -822,6 +822,7 @@ const fn closed_tool_agent(agent: AgentKind) -> bool {
             | AgentKind::AntigravityCli
             | AgentKind::Grok
             | AgentKind::Hermes
+            | AgentKind::KiroCli
             | AgentKind::Pool
             | AgentKind::Zcode
             | AgentKind::CopilotCli
@@ -2852,6 +2853,71 @@ mod tests {
             }),
         );
         assert_eq!(pre.title_hint.as_deref(), Some("tool non-file"));
+        assert!(pre.body_excerpt.is_some_and(|body| !body.is_empty()));
+    }
+
+    /// Kiro CLI's tool hooks carry `tool_name` and `tool_input`, and its
+    /// `PostToolUse` adds `tool_response`: a plain string on the v3 engine
+    /// (live capture, Kiro CLI 2.16.2) and an object with a `success` flag on
+    /// v2. The capture policy already read this shape, but Kiro was absent from
+    /// `closed_tool_agent`, so its tool observations were stored with no title
+    /// or body, the failure mode Grok had in #931.
+    #[test]
+    fn kiro_cli_tool_events_keep_their_family_title_and_output() {
+        let v3 = HookEnvelope::from_query_and_body(
+            HookQuery {
+                event: "post-tool-use".into(),
+                agent: Some("kiro-cli".into()),
+                ..Default::default()
+            },
+            serde_json::json!({
+                "hook_event_name": "PostToolUse",
+                "session_id": "kiro-v3-session",
+                "cwd": "/workspace/project",
+                "tool_name": "read_file",
+                "tool_input": {"path": "/workspace/project/sample.txt"},
+                "tool_response": "MARKER_KIRO_V3_OUTPUT",
+            }),
+        );
+        assert_eq!(v3.agent, AgentKind::KiroCli);
+        assert_eq!(v3.title_hint.as_deref(), Some("tool file"));
+        let body = v3.body_excerpt.expect("kiro v3 post-tool body");
+        assert!(body.contains("MARKER_KIRO_V3_OUTPUT"), "{body:?}");
+
+        let v2 = HookEnvelope::from_query_and_body(
+            HookQuery {
+                event: "post-tool-use".into(),
+                agent: Some("kiro-cli".into()),
+                ..Default::default()
+            },
+            serde_json::json!({
+                "session_id": "kiro-v2-session",
+                "cwd": "/workspace/project",
+                "tool_name": "fs_read",
+                "tool_input": {"operations": [{"mode": "Line", "path": "src/lib.rs"}]},
+                "tool_response": {"success": true, "result": ["MARKER_KIRO_V2_OUTPUT"]},
+            }),
+        );
+        assert_eq!(v2.title_hint.as_deref(), Some("tool file"));
+        let body = v2.body_excerpt.expect("kiro v2 post-tool body");
+        assert!(body.contains("outcome: success"), "{body:?}");
+        assert!(body.contains("MARKER_KIRO_V2_OUTPUT"), "{body:?}");
+
+        let pre = HookEnvelope::from_query_and_body(
+            HookQuery {
+                event: "pre-tool-use".into(),
+                agent: Some("kiro-cli".into()),
+                ..Default::default()
+            },
+            serde_json::json!({
+                "hook_event_name": "PreToolUse",
+                "session_id": "kiro-v3-session",
+                "cwd": "/workspace/project",
+                "tool_name": "read_file",
+                "tool_input": {"path": "/workspace/project/sample.txt"},
+            }),
+        );
+        assert_eq!(pre.title_hint.as_deref(), Some("tool file"));
         assert!(pre.body_excerpt.is_some_and(|body| !body.is_empty()));
     }
 
