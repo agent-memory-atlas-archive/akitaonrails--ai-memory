@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Documented that Zero runs hook commands inside its sandbox, whose default
+  policy blocks network (loopback included) and writes outside the
+  workspace, so hook events stay in the spool instead of reaching the
+  server. The `install-hooks --agent zero` and `setup-agent` notes and the
+  Zero install docs now name the global `~/.config/zero/config.json`
+  `sandbox` keys that allow delivery, their tradeoff, and the
+  `ai-memory hook-drain` fallback. (#1172)
 - Fixed Cursor tool calls being stored with no title or content: Cursor's own
   hooks, and the Claude Code hooks Cursor also runs, send Claude's
   `tool_name`/`tool_input` fields, but Cursor was missing from the tool-capture
