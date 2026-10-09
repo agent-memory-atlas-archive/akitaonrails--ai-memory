@@ -668,8 +668,9 @@ on receipt before persistence.
 Native `ai-memory hook --event ...` commands spool events locally. The POSIX
 shell bundle and the PowerShell (`.ps1`) bundle spool too, but only on
 failure: they POST first and write the event to the same
-`<data_dir>/hook-spool/` contract when the server is unreachable or answers
-5xx, then flush the backlog behind the next delivery that succeeds. A 4xx
+`<data_dir>/hook-spool/` contract when the server is unreachable, answers
+5xx, or answers 408, 425 or 429 (a saturated server asks for a retry), then
+flush the backlog behind the next delivery that succeeds. Any other 4xx
 is a permanent rejection and is not retried. Session start
 does a short bounded cleanup drain before fetching a handoff; cancellation-prone
 boundary events (`stop`, `pre-compact`, and `session-end`) start a detached
@@ -1762,7 +1763,7 @@ instead. For Pi, the generated extension also provides the MCP bridge.
 
 The generated TypeScript integrations survive an unreachable server the
 same way the native hooks do: a delivery that fails at the network level
-(or gets a 5xx) is written to `<data_dir>/hook-spool/` in the exact
+(or gets a 5xx, 408, 425 or 429) is written to `<data_dir>/hook-spool/` in the exact
 format `ai-memory hook-drain` reads, and the plugin drains that backlog
 itself once the server is reachable again — so a day of laptop work off
 the server's network is captured, not silently dropped. Each spooled
