@@ -656,6 +656,7 @@ async fn run_once_with_wiring(
         new_workstream: args.new_workstream,
         force_unlock,
         lease_owner: lease_owner(),
+        repository_identity: remote_identity_naming(&repository.cwd, &project),
     };
     let interrupted_before_spawn = CancellationToken::new();
     let interrupt_task = tokio::spawn(capture_interrupts(interrupted_before_spawn.clone()));
@@ -2376,6 +2377,18 @@ fn auto_session_dir(
     .session_dir)
 }
 
+/// The checkout's git-remote identity when `project` is the name it derives,
+/// so the server can route the run by identity the way hook capture does. A
+/// name from `--project` or a marker that differs from it routes by name.
+fn remote_identity_naming(cwd: &Path, project: &str) -> Option<String> {
+    crate::marker::discover_remote_identity(&cwd.to_string_lossy())
+        .filter(|identity| {
+            ai_memory_core::repository_identity::path_style_name(identity).as_deref()
+                == Some(project)
+        })
+        .map(|identity| identity.identity)
+}
+
 fn unique_auto_agents(candidates: &[AutoSessionCandidate]) -> Vec<AgentKind> {
     let mut agents = Vec::new();
     for candidate in candidates {
@@ -3751,6 +3764,41 @@ mod tests {
         JailPlan { warn, mode }
     }
 
+    #[test]
+    fn run_sends_the_remote_identity_only_for_the_name_it_derives() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let repo = tmp.path().join("new-space-game");
+        std::fs::create_dir_all(&repo).unwrap();
+        for args in [
+            &["init", "-q"][..],
+            &[
+                "remote",
+                "add",
+                "origin",
+                "git@github.com:victorcesc/unknown-system.git",
+            ],
+        ] {
+            assert!(
+                std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(&repo)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        assert_eq!(
+            remote_identity_naming(&repo, "victorcesc-unknown-system").as_deref(),
+            Some("github.com/victorcesc/unknown-system")
+        );
+        // A folder-name, `--project`, or marker name routes by name alone.
+        assert_eq!(remote_identity_naming(&repo, "new-space-game"), None);
+        assert_eq!(
+            remote_identity_naming(tmp.path(), "victorcesc-unknown-system"),
+            None
+        );
+    }
+
     /// The full decision table: request × jailed × yolo × interactive ×
     /// usable × project `.ai-jail`. `interactive` stands for "stdin and stderr
     /// are both TTYs".
@@ -4743,6 +4791,7 @@ mod tests {
             new_workstream: None,
             force_unlock: false,
             lease_owner: "workstation:43".into(),
+            repository_identity: None,
         };
 
         let prepared = prepare_managed_run_with_retry(
@@ -5014,6 +5063,7 @@ mod tests {
             new_workstream: None,
             force_unlock: false,
             lease_owner: "workstation:43".into(),
+            repository_identity: None,
         }
     }
 

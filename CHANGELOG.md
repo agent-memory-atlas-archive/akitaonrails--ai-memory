@@ -55,6 +55,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Settings window behind the frontmost app, so clicking it appeared to do
   nothing. The item now activates the app before opening the window, as
   **Show Status…** already did. (#1161)
+- Fixed `ai-memory run` creating an empty twin project when a repository's
+  folder name differs from its git remote (a `new-space-game` checkout of
+  `github.com/acme/unknown-system`) and its project predates recorded
+  identities: the run asked for the remote-derived name alone, so it missed
+  the folder-named project, and once hook capture claimed that project every
+  later run failed with `project '…' is ambiguous`. The launcher now sends the
+  checkout's remote identity with the derived name and the server routes the
+  run by identity, as capture does — which also lets runs in an
+  already-affected repository open again. (#1182)
 
 ## [2.6.2] - 2026-10-08
 
