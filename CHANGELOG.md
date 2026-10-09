@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fixed the generated OpenCode, OpenCode 2, OMP, Pi and OpenClaw integrations
+  losing hook events when the server is saturated. They treated every 4xx as a
+  permanent rejection, so a `429` (or a `408` or `425`) was dropped instead of
+  spooled, and their spool drain deleted each queued entry it met on such a
+  response. Both now keep `408`, `425`, `429` and every `5xx` for a later
+  drain, as the shell, PowerShell and native hooks already do. Re-run
+  `install-hooks --apply` for the agent to regenerate its plugin.
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
