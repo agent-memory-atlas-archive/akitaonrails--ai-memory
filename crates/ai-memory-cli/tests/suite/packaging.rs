@@ -2661,6 +2661,43 @@ mod slow {
         assert_eq!(names, expected);
     }
 
+    // The installer lists each agent's scripts by hand, so a bundle that gains
+    // or loses a script leaves the list stale: a script the list still asks for
+    // aborts the install, and one it never asks for is silently not installed.
+    // Feeding it the file names the repository bundles really ship catches both.
+    #[cfg(unix)]
+    #[test]
+    fn hook_installer_installs_every_script_each_shipped_bundle_has() {
+        for agent in [
+            "claude-code",
+            "codex",
+            "cursor",
+            "gemini-cli",
+            "antigravity-cli",
+            "grok",
+            "kimi-code",
+            "kiro-cli",
+            "command-code",
+        ] {
+            let mut shipped = std::fs::read_dir(repo_root().join("hooks").join(agent))
+                .unwrap()
+                .filter_map(|entry| {
+                    let name = entry.unwrap().file_name().into_string().unwrap();
+                    name.strip_suffix(".sh").map(str::to_owned)
+                })
+                .collect::<Vec<_>>();
+            shipped.sort();
+            let hooks = shipped.iter().map(String::as_str).collect::<Vec<_>>();
+            let expected = shipped
+                .iter()
+                .map(|hook| format!("{hook}.sh"))
+                .collect::<Vec<_>>();
+
+            let installed = installed_hook_names(agent, agent, &hooks);
+            assert_eq!(installed, expected, "{agent}");
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn managed_host_commands_use_native_path_and_remote_server_without_docker() {
