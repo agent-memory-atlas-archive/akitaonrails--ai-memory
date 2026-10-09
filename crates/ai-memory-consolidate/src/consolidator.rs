@@ -3303,11 +3303,11 @@ mod tests {
         );
     }
 
-    /// #886: a CJK-only title still folds to nothing and falls back to the
-    /// static slug — diacritic folding must not resurrect it.
+    /// #886: a CJK-only title still folds to no ASCII slug — diacritic
+    /// folding must not resurrect it — and takes the title-keyed fallback.
     #[test]
     fn slugify_cjk_still_falls_back() {
-        assert_eq!(slugify_for_rule("中文标题"), "rule");
+        assert!(slugify_for_rule("中文标题").starts_with("rule-"));
     }
 
     /// A slug whose first 60 chars already end on a whole word keeps that
