@@ -6023,6 +6023,16 @@ pub fn purge_session(
         rusqlite::params![&sid[..], &wid[..], &pid[..]],
     )? as u64;
 
+    // Profile evidence harvested from this session's prompts. A candidate
+    // keeps the user's own sentence (`statement`, `quote`), so one left behind
+    // would let a later convergence write that sentence into a profile page.
+    tx.execute(
+        "DELETE FROM profile_candidates \
+          WHERE source_kind = 'prompt' AND source_ref = ?1 \
+            AND workspace_id = ?2 AND project_id = ?3",
+        rusqlite::params![format!("session:{session_id}"), &wid[..], &pid[..]],
+    )?;
+
     // Tombstone before the row goes, in the same transaction: a purge that
     // committed the deletion but not the tombstone would be undone by the
     // next spool drain (#387).
@@ -10081,6 +10091,61 @@ pub(crate) mod tests {
         assert!(
             from_session_id.is_none(),
             "the handoff's from_session_id must be nulled, not the row deleted"
+        );
+    }
+
+    /// The cross-project profile keeps the user's own sentence from a prompt
+    /// in `profile_candidates`, keyed `session:<id>`. Purging the session must
+    /// take that evidence with it. A sibling session's candidate, a page
+    /// candidate and the same session id in another project are the controls.
+    #[test]
+    fn purge_session_deletes_the_profile_candidates_harvested_from_it() {
+        let (_tmp, mut conn, ws, proj) = fresh_db();
+        let other = get_or_create_project(&mut conn, &ws, "other", None).unwrap();
+        let (purged, _) = seed_session(&mut conn, ws, proj, "target");
+        let (sibling, _) = seed_session(&mut conn, ws, proj, "sibling");
+        let candidate = |project: ProjectId, kind: &str, source_ref: String| {
+            conn.execute(
+                "INSERT INTO profile_candidates \
+                 (workspace_id, project_id, source_kind, source_ref, topic_key, category, \
+                  statement, quote, observed_at, generality) \
+                 VALUES (?1, ?2, ?3, ?4, 'topic', 'workflow', 'statement', 'quote', 1, 'general')",
+                params![ws.as_bytes(), project.as_bytes(), kind, source_ref],
+            )
+            .unwrap();
+        };
+        candidate(proj, "prompt", format!("session:{purged}"));
+        candidate(proj, "prompt", format!("session:{sibling}"));
+        candidate(proj, "page", "page:_rules/keep.md".into());
+        candidate(other, "prompt", format!("session:{purged}"));
+
+        purge_session(
+            &mut conn,
+            ws,
+            proj,
+            purged,
+            None,
+            Compaction::Skip,
+            PurgeMode::Commit,
+        )
+        .unwrap();
+
+        let remaining: Vec<(Vec<u8>, String)> = {
+            let mut stmt = conn
+                .prepare("SELECT project_id, source_ref FROM profile_candidates ORDER BY id")
+                .unwrap();
+            stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap()
+        };
+        assert_eq!(
+            remaining,
+            [
+                (proj.as_bytes().to_vec(), format!("session:{sibling}")),
+                (proj.as_bytes().to_vec(), "page:_rules/keep.md".to_owned()),
+                (other.as_bytes().to_vec(), format!("session:{purged}")),
+            ]
         );
     }
 
