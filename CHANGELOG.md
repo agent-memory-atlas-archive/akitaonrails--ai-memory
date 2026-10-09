@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fixed the curl hook installer (`ai-memory-install-hooks`) installing event
+  scripts that could not run. Every script sources the shared `_lib.sh` helper
+  from its own directory or the one above it, but the installer fetched only
+  the per-agent scripts, so the helper was never written and each script
+  stopped at the line that sources it. The installer now also extracts
+  `_lib.sh` from the verified archive into the install root, beside the agent
+  directories, and refuses to continue when the archive does not contain it.
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
