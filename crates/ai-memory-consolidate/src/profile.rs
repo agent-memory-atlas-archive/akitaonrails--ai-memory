@@ -2502,6 +2502,17 @@ mod tests {
         let waiting: Vec<&str> = plan.waiting.iter().map(|w| w.statement.as_str()).collect();
         assert_eq!(waiting, ["Every store opens SQLite in WAL mode."]);
 
+        // The label decides, not the value's length: a long ADR template
+        // field is dropped, a terse labelled rule waits.
+        let template = page(
+            "alpha",
+            "Status:** accepted <!-- proposed | accepted | superseded by [[decisions/other]] -->",
+        );
+        let rule = page("beta", "Package manager:** pnpm");
+        let plan = converge(&[&template, &rule], &[], &[], 2, 1);
+        let waiting: Vec<&str> = plan.waiting.iter().map(|w| w.statement.as_str()).collect();
+        assert_eq!(waiting, ["Package manager:** pnpm"]);
+
         // The same words from a prompt are not a page field and stay.
         let said = row(
             "alpha",
