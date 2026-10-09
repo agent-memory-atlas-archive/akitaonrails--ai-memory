@@ -1,5 +1,6 @@
 //! Incremental, read-only extraction from native harness session stores.
 
+use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read as _, Seek as _, SeekFrom};
@@ -2627,7 +2628,7 @@ fn locate_session_file(
         return Ok(None);
     }
     let files = collect_session_files(harness, home, session_dir)?;
-    for path in lookup_candidates(files) {
+    for path in lookup_candidates(files, id) {
         if session_path_matches(harness, &path, id, cwd)? {
             return Ok(Some(path));
         }
@@ -2635,12 +2636,28 @@ fn locate_session_file(
     Ok(None)
 }
 
-/// The transcripts a session lookup reads, in the order it reads them.
-/// Temporary copies go last, and the scan stops after a fixed number.
-fn lookup_candidates(mut files: Vec<PathBuf>) -> Vec<PathBuf> {
-    files.sort_by_key(|path| temporary_transcript(path));
+/// The transcripts a session lookup reads, in the order it reads them, up to a
+/// fixed number. A store can hold more than that, and the directory walk lists
+/// them in no useful order, so the order decides which sessions can be found.
+/// Temporary copies go last. Codex, Pi, OMP and Grok put the session id in the
+/// transcript's file or directory name, so a transcript that names it comes
+/// first. The rest follow newest first, as discovery and listing do.
+fn lookup_candidates(mut files: Vec<PathBuf>, id: &str) -> Vec<PathBuf> {
+    files.sort_by_cached_key(|path| {
+        (
+            temporary_transcript(path),
+            !names_session(path, id),
+            Reverse(modified(path)),
+            path.clone(),
+        )
+    });
     files.truncate(2_000);
     files
+}
+
+fn names_session(path: &Path, id: &str) -> bool {
+    path.components()
+        .any(|component| component.as_os_str().to_string_lossy().contains(id))
 }
 
 /// The folder Claude Code keeps a project's transcripts in: the cwd with
@@ -5064,6 +5081,32 @@ mod tests {
         fs::create_dir_all(&shortened).unwrap();
         fs::write(shortened.join(format!("{id}.jsonl")), record(&cwd)).unwrap();
         assert_eq!(locate(), Some(shortened.join(format!("{id}.jsonl"))));
+    }
+
+    /// A store can hold more transcripts than a lookup reads, and the walk
+    /// lists them in no useful order. The transcript named after the session
+    /// id is read first wherever the walk put it, and temporary copies last.
+    #[test]
+    fn session_lookup_reads_the_transcript_named_after_the_id_first() {
+        let id = "5973b6c0-94b8-487b-a530-2aeb6098ae0e";
+        let root = Path::new("/store/sessions");
+        let decoy = |n: usize| root.join(format!("rollout-{n:04}.jsonl"));
+
+        let named = root.join(format!("rollout-2500-{id}.jsonl"));
+        let mut files = (0..2_500).map(&decoy).collect::<Vec<_>>();
+        files.push(named.clone());
+        let candidates = lookup_candidates(files, id);
+        assert_eq!(candidates.len(), 2_000);
+        assert_eq!(candidates.first(), Some(&named));
+
+        // Grok keeps each session in a directory named after it.
+        let grok = root.join(id).join("chat_history.jsonl");
+        let candidates = lookup_candidates(vec![decoy(1), decoy(2), grok.clone()], id);
+        assert_eq!(candidates.first(), Some(&grok));
+
+        let temporary = root.join(format!("{id}.jsonl.1a2b.tmp"));
+        let candidates = lookup_candidates(vec![temporary.clone(), decoy(1), named.clone()], id);
+        assert_eq!(candidates, [named, decoy(1), temporary]);
     }
 
     #[test]
