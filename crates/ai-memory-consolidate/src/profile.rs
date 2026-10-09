@@ -30,7 +30,9 @@ use ai_memory_core::profile::{
     EffectiveProfileShare, PROFILE_CATEGORIES, PROFILE_PATH_PREFIX, ProfileCandidateSource,
     ProfileEntry, ProfileGenerality, ProfileSettings,
 };
-use ai_memory_core::{ActorContext, IdentityKey, PagePath, Tier, UserId, WorkspaceId};
+use ai_memory_core::{
+    ActorContext, IdentityKey, PagePath, Tier, UserId, WorkspaceId, find_marker_line,
+};
 use ai_memory_llm::{ChatMessage, ChatRequest, LlmProvider, complete_structured};
 use ai_memory_store::{
     NewProfileCandidate, PROFILE_CANDIDATES_LIMIT, PROFILE_HARVEST_BATCH, ProfileCandidateRow,
@@ -534,6 +536,52 @@ pub struct DetectedPreference {
     pub applies_to: Option<Vec<String>>,
     /// Confidence reported by the LLM classifier.
     pub confidence: Option<f64>,
+}
+
+/// The part of a stored prompt the user wrote, or `None` when the whole turn
+/// is harness context. A user-prompt observation can carry text no one typed:
+/// a harness block delivered as a user turn (`<task-notification>`), the
+/// instruction files Codex injects, or ai-memory's own routing snippet and
+/// recalled history pasted along. Harvesting those turns the repository's
+/// rules, or ai-memory's security notice, into "the user's" preferences.
+/// Checked here as well as at import: hooks store harness turns as prompts,
+/// and `profile rebuild` re-reads observations stored before an import filter
+/// existed.
+fn user_written(body: &str) -> Option<String> {
+    if ai_memory_core::looks_like_markup_block(body)
+        || ai_memory_core::looks_like_codex_instructions(body)
+    {
+        return None;
+    }
+    let text = without_fenced(
+        body,
+        ai_memory_core::routing_snippet::MARKER_START,
+        ai_memory_core::routing_snippet::MARKER_END,
+    );
+    Some(without_fenced(
+        &text,
+        ai_memory_core::profile::UNTRUSTED_HISTORY_START,
+        ai_memory_core::profile::UNTRUSTED_HISTORY_END,
+    ))
+}
+
+/// `text` without the regions between `start` and `end`. An unclosed `start`
+/// drops the rest: the 16 KiB prompt cap can cut a block before its end.
+/// Only markers on their own line count, the way ai-memory writes them; a
+/// marker quoted inside a sentence would otherwise drop the user's words
+/// after it.
+fn without_fenced(text: &str, start: &str, end: &str) -> String {
+    let mut out = String::new();
+    let mut from = 0;
+    while let Some(open) = find_marker_line(text, start, from) {
+        out.push_str(&text[from..open]);
+        match find_marker_line(text, end, open + start.len()) {
+            Some(close) => from = close + end.len(),
+            None => return out,
+        }
+    }
+    out.push_str(&text[from..]);
+    out
 }
 
 /// Sentences of `text` outside fenced code blocks and indented code, each
@@ -1851,21 +1899,21 @@ async fn harvest_project(
     let mut pending: Vec<PendingSentence> = Vec::new();
     for prompt in &prompts {
         mark.observations_until = mark.observations_until.max(prompt.created_at);
+        let Some(text) = user_written(&prompt.body) else {
+            continue;
+        };
         let session_ref = format!("session:{}", prompt.session_id);
         if llm.is_some() {
-            pending.extend(
-                sentences(&prompt.body)
-                    .into_iter()
-                    .filter(|s| has_marker(s))
-                    .map(|sentence| PendingSentence {
-                        sentence,
-                        observed_at: prompt.created_at,
-                        session_ref: session_ref.clone(),
-                        contributor: prompt.contributor.clone(),
-                    }),
-            );
+            pending.extend(sentences(&text).into_iter().filter(|s| has_marker(s)).map(
+                |sentence| PendingSentence {
+                    sentence,
+                    observed_at: prompt.created_at,
+                    session_ref: session_ref.clone(),
+                    contributor: prompt.contributor.clone(),
+                },
+            ));
         } else {
-            for found in detect_preferences(&prompt.body) {
+            for found in detect_preferences(&text) {
                 candidates.push(candidate_from(
                     ProfileCandidateSource::Prompt,
                     session_ref.clone(),
@@ -2476,6 +2524,28 @@ mod tests {
 
     fn day(n: i64) -> i64 {
         1_790_000_000_000_000 + n * 86_400_000_000
+    }
+
+    /// A marker quoted inside a sentence is the user talking about it, not
+    /// a pasted block: the whole prompt is harvested. A block whose markers
+    /// sit on their own lines is still dropped (control).
+    #[test]
+    fn a_marker_quoted_mid_sentence_keeps_the_prompt() {
+        let quoted = "Always use pnpm. The `<!-- ai-memory:start -->` marker sits in \
+                      CLAUDE.md; never run npm";
+        assert_eq!(user_written(quoted).as_deref(), Some(quoted));
+        assert!(
+            detect_preferences(&user_written(quoted).unwrap_or_default())
+                .iter()
+                .any(|found| found.statement.contains("never run npm"))
+        );
+
+        let pasted = "Always use pnpm.\n<!-- ai-memory:start -->\nNever write notes.\n\
+                      <!-- ai-memory:end -->\nKeep commits small.";
+        assert_eq!(
+            user_written(pasted).as_deref(),
+            Some("Always use pnpm.\n\nKeep commits small.")
+        );
     }
 
     /// Agent output in the prompt channel (a lead agent's brief, a pasted

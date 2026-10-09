@@ -34,6 +34,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Zero install docs now name the global `~/.config/zero/config.json`
   `sandbox` keys that allow delivery, their tradeoff, and the
   `ai-memory hook-drain` fallback. (#1172)
+- Fixed a global `~/.codex/AGENTS.md` reaching the cross-project profile as
+  the user's own words. Codex injects its instruction files as a user message
+  headed `# AGENTS.md instructions for <cwd>` when a project `AGENTS.md`
+  contributes, and `# AGENTS.md instructions` with no directory when only the
+  global file does. The transcript import recognized only the first heading,
+  so `backfill` stored the global file as a user prompt in every project, and
+  the profile harvest admitted its "always"/"never" lines, which repeat across
+  projects by construction. The import now recognizes both headings. (#1173)
+- Fixed the profile harvest reading text the user did not write as the
+  user's words: a user-prompt observation that is a harness turn, such as
+  Claude Code's `<task-notification>` blocks or Codex's injected
+  instructions, is now skipped, and ai-memory's own routing and
+  recalled-history blocks inside a prompt are left out, including a block the
+  16 KiB prompt cap cut before its end marker. `profile rebuild` also skips
+  Codex instructions an earlier version stored as prompts, but it keeps the
+  candidates already harvested from them, so those lines can still show as
+  waiting in `profile review`. An entry an earlier version already admitted,
+  or one those candidates reach later, stays until `ai-memory profile forget`
+  removes it. (#1173)
 - Fixed Cursor tool calls being stored with no title or content: Cursor's own
   hooks, and the Claude Code hooks Cursor also runs, send Claude's
   `tool_name`/`tool_input` fields, but Cursor was missing from the tool-capture
