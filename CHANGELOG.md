@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fixed auto-improve accepting a proposal whose confidence is outside 0 to 1:
   a model that answered in percent (`85`) cleared the confidence floor and was
-  staged, shown to the reviewer as 8500% and sorted above every other
-  proposal. Such a value is now rejected as `confidence_out_of_range` and
+  staged, shown to the reviewer as 8500% and ranked first when sorting by
+  confidence. Such a value is now rejected as `confidence_out_of_range` and
   recorded with the other rejected candidates. (#1192)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
