@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fixed Crush sub-agent sessions being listed as sessions of their own:
+  `backfill`, `doctor` and the automatic session pick of `ai-memory run` read
+  the Crush `sessions` table without skipping rows that have a parent, so a
+  sub-agent session could be imported as a separate session or chosen for the
+  resume. The listing now skips them, as session discovery already did.
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
