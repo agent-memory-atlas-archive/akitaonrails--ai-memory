@@ -760,8 +760,8 @@ pub enum HookProcessingOutcome {
     DroppedUnauthorized,
     /// Session identity or ownership conflicted.
     DroppedCollision,
-    /// The event had no session id and was not a SessionStart, so it could
-    /// never be stored.
+    /// The event could never be stored: it had no session id and was not a
+    /// SessionStart, or its session was purged.
     DroppedInvalid,
 }
 
@@ -1030,6 +1030,15 @@ async fn handle_hook_batch(
             {
                 warn!(session = ?session, agent = %agent.as_str(), event = ?event, reason = SESSION_COLLISION_REASON, "hook batch session collision dropped");
                 HookProcessingOutcome::DroppedCollision
+            }
+            Err(e)
+                if matches!(
+                    e.downcast_ref::<StoreError>(),
+                    Some(StoreError::SessionPurged(_))
+                ) =>
+            {
+                warn!(session = ?session, agent = %agent.as_str(), event = ?event, "hook batch event of a purged session dropped");
+                HookProcessingOutcome::DroppedInvalid
             }
             Err(e) => {
                 state.ingest_metrics.record_failed();
@@ -3214,6 +3223,20 @@ async fn process_envelope(
                 "hook session collision dropped"
             );
             HookProcessingOutcome::DroppedCollision
+        }
+        Err(e)
+            if matches!(
+                e.downcast_ref::<StoreError>(),
+                Some(StoreError::SessionPurged(_))
+            ) =>
+        {
+            warn!(
+                session = ?session,
+                agent = %agent.as_str(),
+                event = ?event,
+                "hook event of a purged session dropped"
+            );
+            HookProcessingOutcome::DroppedInvalid
         }
         Err(e) => {
             state.ingest_metrics.record_failed();
@@ -7520,6 +7543,60 @@ mod tests {
             before.pages_all
         );
         assert_eq!(state.ingest_metrics.snapshot().last_persisted_ms, Some(123));
+    }
+
+    /// A purge is terminal. A late delivery for a purged session is dropped
+    /// and acknowledged, never stored and never failed: a failed delivery
+    /// stays in the client's spool and is retried (#387).
+    #[tokio::test]
+    async fn async_processing_drops_events_of_a_purged_session() {
+        let tmp = TempDir::new().unwrap();
+        let state = Arc::new(make_state(&tmp).await);
+        let env = session_envelope("user-prompt-submit", "async-purged", "/tmp/scratch");
+        let sid = resolve_session_id(&env).unwrap();
+        assert_eq!(
+            process_envelope(
+                state.clone(),
+                env.clone(),
+                None,
+                ai_memory_core::AuthLevel::Anonymous,
+                Vec::new(),
+                None
+            )
+            .await,
+            Some(HookProcessingOutcome::Stored)
+        );
+        let (ws, proj, _) = state.reader.find_session_scope(sid).await.unwrap().unwrap();
+        state
+            .writer
+            .purge_session(
+                ws,
+                proj,
+                sid,
+                None,
+                ai_memory_store::Compaction::Skip,
+                ai_memory_store::PurgeMode::Commit,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            process_envelope(
+                state.clone(),
+                env,
+                None,
+                ai_memory_core::AuthLevel::Anonymous,
+                Vec::new(),
+                None
+            )
+            .await,
+            Some(HookProcessingOutcome::DroppedInvalid)
+        );
+        assert_eq!(state.reader.find_session_scope(sid).await.unwrap(), None);
+        let observations = state.reader.observations_for_session(sid).await.unwrap();
+        assert!(observations.is_empty());
+        let metrics = state.ingest_metrics.snapshot();
+        assert_eq!((metrics.dropped_invalid, metrics.failed), (1, 0));
     }
 
     #[tokio::test]
