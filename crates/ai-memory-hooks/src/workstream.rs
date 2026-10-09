@@ -4685,6 +4685,97 @@ mod tests {
         assert_eq!(run_project(&store, admitted).await, (workspace_id, holder));
     }
 
+    /// The claim branch: a legacy project with no recorded identity whose
+    /// `repo_path` contains the run cwd. An outsider who may not write to it
+    /// must neither stamp the identity on it nor get a twin under the derived
+    /// name.
+    #[tokio::test]
+    async fn managed_run_identity_never_claims_a_restricted_legacy_project() {
+        let temp = TempDir::new().unwrap();
+        let store = Store::open(temp.path()).unwrap();
+        let state = test_state(&store, temp.path());
+        let workspace_id = store
+            .writer
+            .get_or_create_workspace("default")
+            .await
+            .unwrap();
+        let legacy = store
+            .writer
+            .get_or_create_project(
+                workspace_id,
+                "new-space-game",
+                Some("/repo/new-space-game".into()),
+            )
+            .await
+            .unwrap();
+        store
+            .writer
+            .set_access_mode(legacy, ai_memory_store::AccessMode::Restricted)
+            .await
+            .unwrap();
+        let user = |name: &str, seed: u8| {
+            store.writer.create_user(
+                ai_memory_core::NewUser {
+                    username: name.into(),
+                    name: None,
+                    email: None,
+                },
+                [seed; ai_memory_store::TOKEN_HASH_LEN],
+            )
+        };
+        let outsider = user("outsider", 3).await.unwrap();
+        let member = user("member", 4).await.unwrap();
+        store
+            .writer
+            .grant_memory(member, legacy, ai_memory_store::GrantLevel::Write, None)
+            .await
+            .unwrap();
+        let request = || {
+            Json(identity_run_request(
+                "victorcesc-unknown-system",
+                Some("github.com/victorcesc/unknown-system"),
+            ))
+        };
+        let legacy_identity = || async {
+            store
+                .reader
+                .list_all_scopes()
+                .await
+                .unwrap()
+                .into_iter()
+                .find(|scope| scope.project_id == legacy)
+                .unwrap()
+                .identity
+        };
+
+        let refused = prepare_run(
+            State(state.clone()),
+            Some(Extension(AuthLevel::User)),
+            None,
+            Some(Extension(ai_memory_core::AuthorizedViewer(outsider))),
+            request(),
+        )
+        .await;
+        assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+        assert_eq!(legacy_identity().await, None);
+        assert_eq!(project_names(&store).await, ["new-space-game"]);
+
+        let admitted = prepare_run(
+            State(state),
+            Some(Extension(AuthLevel::User)),
+            None,
+            Some(Extension(ai_memory_core::AuthorizedViewer(member))),
+            request(),
+        )
+        .await;
+        assert_eq!(run_project(&store, admitted).await, (workspace_id, legacy));
+        assert_eq!(
+            legacy_identity().await.as_deref(),
+            Some("github.com/victorcesc/unknown-system")
+        );
+        assert_eq!(project_names(&store).await, ["victorcesc-unknown-system"]);
+    }
+
     #[tokio::test]
     async fn managed_run_identity_routing_stays_inside_the_requested_workspace() {
         let temp = TempDir::new().unwrap();
