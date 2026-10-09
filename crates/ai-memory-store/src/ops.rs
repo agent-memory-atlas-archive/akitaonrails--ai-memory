@@ -6842,6 +6842,37 @@ pub fn move_project_workspace(
         "UPDATE workstreams SET workspace_id = ?1 WHERE project_id = ?2 AND workspace_id = ?3",
         params![&to[..], &pid[..], &from[..]],
     )? as u64;
+    // The remaining tables that carry the workspace beside the project id.
+    // Left behind, an entity or a feedback row stops matching reads keyed on
+    // the new workspace, and a purge tombstone stops matching the moved
+    // project's session ids, so a purged session could be recreated.
+    for table in [
+        "entities",
+        "page_feedback",
+        "purged_sessions",
+        "profile_candidates",
+        "profile_entry_ledger",
+        "profile_harvest_marks",
+    ] {
+        tx.execute(
+            &format!(
+                "UPDATE {table} SET workspace_id = ?1 WHERE project_id = ?2 AND workspace_id = ?3"
+            ),
+            params![&to[..], &pid[..], &from[..]],
+        )?;
+    }
+    // A message names the project on both ends: pending mail addressed to the
+    // moved project and mail it sent, which it can still cancel.
+    tx.execute(
+        "UPDATE agent_messages SET to_workspace_id = ?1 \
+          WHERE to_project_id = ?2 AND to_workspace_id = ?3",
+        params![&to[..], &pid[..], &from[..]],
+    )?;
+    tx.execute(
+        "UPDATE agent_messages SET from_workspace_id = ?1 \
+          WHERE from_project_id = ?2 AND from_workspace_id = ?3",
+        params![&to[..], &pid[..], &from[..]],
+    )?;
 
     let projects_updated = tx.execute(
         "UPDATE projects SET workspace_id = ?1 WHERE id = ?2 AND workspace_id = ?3",
@@ -13205,6 +13236,115 @@ pub(crate) mod tests {
             )
             .unwrap();
         assert_eq!(still_there, 1);
+    }
+
+    /// Tables that carry the workspace beside the project id must follow a
+    /// move too: pending mail on both ends, entities, page feedback, the purge
+    /// tombstone and the profile evidence. The other project's side of a
+    /// message stays where it is.
+    #[test]
+    fn move_project_workspace_restamps_the_remaining_workspace_columns() {
+        let (_tmp, mut conn, src_ws, proj) = fresh_db();
+        let dst_ws = get_or_create_workspace(&mut conn, "djalmajr").unwrap();
+        let other = get_or_create_project(&mut conn, &src_ws, "other", None).unwrap();
+
+        let mut with_entity = page(src_ws, proj, "notes/e.md", "body");
+        with_entity.entities = vec!["postgres".into()];
+        let page_id = upsert_page(&mut conn, &with_entity).unwrap();
+        conn.execute(
+            "INSERT INTO page_feedback \
+             (id, page_id, workspace_id, project_id, kind, salience_after, created_at) \
+             VALUES (?1, ?2, ?3, ?4, 'stale', 1.0, 1)",
+            params![
+                uuid::Uuid::new_v4().as_bytes(),
+                &page_id.as_bytes()[..],
+                src_ws.as_bytes(),
+                proj.as_bytes(),
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO purged_sessions (session_id, workspace_id, project_id, purged_at) \
+             VALUES (?1, ?2, ?3, 1)",
+            params![
+                uuid::Uuid::new_v4().as_bytes(),
+                src_ws.as_bytes(),
+                proj.as_bytes(),
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO profile_candidates \
+             (workspace_id, project_id, source_kind, source_ref, topic_key, category, \
+              statement, quote, observed_at, generality) \
+             VALUES (?1, ?2, 'page', 'page:_rules/a.md', 'topic', 'workflow', 's', 'q', 1, 'general')",
+            params![src_ws.as_bytes(), proj.as_bytes()],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO profile_entry_ledger (workspace_id, project_id, path, topic_key, written_at) \
+             VALUES (?1, ?2, 'profile/a.md', 'topic', 1)",
+            params![src_ws.as_bytes(), proj.as_bytes()],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO profile_harvest_marks (workspace_id, project_id) VALUES (?1, ?2)",
+            params![src_ws.as_bytes(), proj.as_bytes()],
+        )
+        .unwrap();
+        let message = |from: ProjectId, to: ProjectId| {
+            conn.execute(
+                "INSERT INTO agent_messages \
+                 (id, from_workspace_id, from_project_id, from_agent, \
+                  to_workspace_id, to_project_id, body, created_at) \
+                 VALUES (?1, ?2, ?3, 'other', ?2, ?4, 'hello', 1)",
+                params![
+                    uuid::Uuid::new_v4().as_bytes(),
+                    src_ws.as_bytes(),
+                    from.as_bytes(),
+                    to.as_bytes(),
+                ],
+            )
+            .unwrap();
+        };
+        message(other, proj);
+        message(proj, other);
+
+        move_project_workspace(&mut conn, &proj, &src_ws, &dst_ws).unwrap();
+
+        let in_workspace = |table: &str, ws: &ai_memory_core::WorkspaceId| -> i64 {
+            conn.query_row(
+                &format!("SELECT COUNT(*) FROM {table} WHERE workspace_id = ?1"),
+                params![ws.as_bytes()],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        for table in [
+            "entities",
+            "page_feedback",
+            "purged_sessions",
+            "profile_candidates",
+            "profile_entry_ledger",
+            "profile_harvest_marks",
+        ] {
+            assert_eq!(in_workspace(table, &dst_ws), 1, "{table} must follow");
+            assert_eq!(in_workspace(table, &src_ws), 0, "{table} must leave");
+        }
+        let side = |column: &str, ws: &ai_memory_core::WorkspaceId| -> i64 {
+            conn.query_row(
+                &format!("SELECT COUNT(*) FROM agent_messages WHERE {column} = ?1"),
+                params![ws.as_bytes()],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        // One message is addressed to the moved project, the other sent by it;
+        // the `other` project's end of each stays in the source workspace.
+        assert_eq!(side("to_workspace_id", &dst_ws), 1);
+        assert_eq!(side("from_workspace_id", &dst_ws), 1);
+        assert_eq!(side("to_workspace_id", &src_ws), 1);
+        assert_eq!(side("from_workspace_id", &src_ws), 1);
     }
 
     /// A same-named project already in the destination workspace makes the
