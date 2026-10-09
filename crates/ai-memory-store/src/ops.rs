@@ -2299,8 +2299,8 @@ fn begin_session_row(conn: &Connection, session: &NewSession) -> StoreResult<()>
     // be sitting undelivered in a client hook spool; without this check the
     // next drain recreates the session row and the observations land again,
     // silently undoing a deletion an application already promised its user
-    // (#387). Every ingest path funnels through here, so this is the one
-    // place the guard has to live.
+    // (#387). The other place a session row is created, hook admission in
+    // `admit_hook_session_event`, repeats the guard.
     if session_is_purged(conn, session)? {
         return Err(StoreError::SessionPurged(session.id.to_string()));
     }
@@ -2895,6 +2895,13 @@ pub fn admit_hook_session_event(
             validate_identity_storage_key(session.actor_user.as_deref(), "session owner")?;
             if !owner_filter.admits(session.actor_user.as_deref()) {
                 return Err(StoreError::SessionCollision);
+            }
+            // Hook ingest creates its session row here rather than through
+            // `begin_session_row`, so a purge must hold against it too: a
+            // late delivery for a purged session would otherwise bring the
+            // session back (#387).
+            if session_is_purged(&tx, session)? {
+                return Err(StoreError::SessionPurged(session.id.to_string()));
             }
             // `now` is also the ingest-key TTL clock above; started_at honors
             // the caller's original event time (backfill) and only falls
@@ -10116,6 +10123,52 @@ pub(crate) mod tests {
             "still gone"
         );
         assert_eq!(count(&conn, "SELECT COUNT(*) FROM observations"), 0);
+    }
+
+    /// `begin_session` is not the only way a hook event creates a session:
+    /// live ingest goes through `admit_hook_session_event`, which inserts the
+    /// row itself. The purge must hold against it as well (#387). A sibling
+    /// session and the same id in another project are the controls.
+    #[test]
+    fn a_purged_session_is_not_recreated_by_hook_admission() {
+        let admit = |conn: &mut Connection, session: &NewSession| {
+            admit_hook_session_event(
+                conn,
+                session,
+                &hook_observation(session),
+                &OwnerFilter::Any,
+                None,
+                None,
+            )
+        };
+        let (_tmp, mut conn, ws, proj) = fresh_db();
+        let (purged, _) = seed_session(&mut conn, ws, proj, "target");
+        let (sibling, _) = seed_session(&mut conn, ws, proj, "sibling");
+        purge_session(
+            &mut conn,
+            ws,
+            proj,
+            purged,
+            None,
+            Compaction::Skip,
+            PurgeMode::Commit,
+        )
+        .unwrap();
+
+        let session = hook_session(purged, ws, proj, None);
+        let err = admit(&mut conn, &session).expect_err("must stay purged");
+        assert!(matches!(err, StoreError::SessionPurged(_)), "got {err:?}");
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM sessions"), 1);
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM observations"), 1);
+
+        let sibling_session = hook_session(sibling, ws, proj, None);
+        let admitted = admit(&mut conn, &sibling_session).unwrap();
+        assert!(matches!(admitted, HookSessionAdmission::Observation { .. }));
+
+        let other = get_or_create_project(&mut conn, &ws, "other", None).unwrap();
+        let elsewhere = hook_session(purged, ws, other, None);
+        let admitted = admit(&mut conn, &elsewhere).unwrap();
+        assert!(matches!(admitted, HookSessionAdmission::Observation { .. }));
     }
 
     /// The tombstone is scoped: purging a session id in one project must not
