@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `subagent-stop.sh`, which their hook config points at, so `install-hooks`
   warned that both were missing. The installer now installs the scripts each
   bundle ships, and a test checks every script-based agent against the
-  repository bundles.
+  repository bundles. (#1185)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
