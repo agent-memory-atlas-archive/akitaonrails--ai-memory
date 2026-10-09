@@ -2626,14 +2626,21 @@ fn locate_session_file(
         }
         return Ok(None);
     }
-    let mut files = collect_session_files(harness, home, session_dir)?;
-    files.sort_by_key(|path| temporary_transcript(path));
-    for path in files.into_iter().take(2_000) {
+    let files = collect_session_files(harness, home, session_dir)?;
+    for path in lookup_candidates(files) {
         if session_path_matches(harness, &path, id, cwd)? {
             return Ok(Some(path));
         }
     }
     Ok(None)
+}
+
+/// The transcripts a session lookup reads, in the order it reads them.
+/// Temporary copies go last, and the scan stops after a fixed number.
+fn lookup_candidates(mut files: Vec<PathBuf>) -> Vec<PathBuf> {
+    files.sort_by_key(|path| temporary_transcript(path));
+    files.truncate(2_000);
+    files
 }
 
 /// The folder Claude Code keeps a project's transcripts in: the cwd with
