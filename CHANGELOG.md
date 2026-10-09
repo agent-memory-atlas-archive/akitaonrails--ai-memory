@@ -21,10 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Claude Code's `<task-notification>` blocks or Codex's injected
   instructions, is now skipped, and ai-memory's own routing and
   recalled-history blocks inside a prompt are left out, including a block the
-  16 KiB prompt cap cut before its end marker. Codex instructions an earlier
-  version stored as prompts are skipped too when `profile rebuild` reads them
-  again. An entry an earlier version already admitted stays until
-  `ai-memory profile forget` removes it. (#1173)
+  16 KiB prompt cap cut before its end marker. `profile rebuild` also skips
+  Codex instructions an earlier version stored as prompts, but it keeps the
+  candidates already harvested from them, so those lines can still show as
+  waiting in `profile review`. An entry an earlier version already admitted,
+  or one those candidates reach later, stays until `ai-memory profile forget`
+  removes it. (#1173)
 - Fixed Cursor tool calls being stored with no title or content: Cursor's own
   hooks, and the Claude Code hooks Cursor also runs, send Claude's
   `tool_name`/`tool_input` fields, but Cursor was missing from the tool-capture

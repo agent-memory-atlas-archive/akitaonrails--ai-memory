@@ -172,8 +172,12 @@ is new since the last one.
   code blocks never are. A sentence that reads like agent output (markdown
   bold, or a `file.ext:line` reference) is skipped too: on hosts where agents
   brief each other through the prompt channel, that text is a lead agent's
-  task brief or a pasted review, not you. Your verbatim words are kept as
-  evidence.
+  task brief or a pasted review, not you. Text you did not write is skipped
+  as well: a harness turn stored as a prompt (Claude Code's
+  `<task-notification>` blocks), the instruction files Codex injects as a user
+  message, and ai-memory's own routing snippet or recalled-history digest
+  pasted into a prompt (only that block; your sentences around it still
+  count). Your verbatim words are kept as evidence.
 - **Curated pages** of the project: `_rules/`, `decisions/`, `gotchas/` and
   `procedures/`.
 - **Stack signals**: the languages the project's activity shows (from file
