@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sentences from prompts into candidate rows keyed to the session, and the
   purge removed the session but not those rows, so a later pass could still
   converge a purged sentence into a profile page. The purge now deletes the
-  session's prompt candidates in the same transaction.
+  session's prompt candidates in the same transaction. (#1195)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
