@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fixed the curl hook installer (`ai-memory-install-hooks`) disagreeing with
+  the hook bundles about which scripts an agent has. `--agent antigravity-cli`
+  always failed: it asked for the seven default event scripts, the Antigravity
+  bundle ships four, and the install stopped at the first missing one.
+  `--agent claude-code` and `--agent grok` never installed `subagent-start.sh`
+  and `subagent-stop.sh`, which their hook config points at, so `install-hooks`
+  warned that both were missing. The installer now installs the scripts each
+  bundle ships, and a test checks every script-based agent against the
+  repository bundles.
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
