@@ -4574,10 +4574,10 @@ fn add_hook_spooling(source: String) -> Result<String> {
           body: JSON.stringify(item.payload),
           signal: timeoutSignal(HOOK_REQUEST_TIMEOUT_MS),
         }).catch(() => undefined);
-        // Unreachable server or 5xx: keep the event on disk for a later
-        // drain (#580). 4xx is permanent - spooling it would retry a
-        // rejection forever.
-        if (!resp || resp.status >= 500) spoolFailedHook(item.url, item.payload);
+        // Unreachable server, 5xx or a transient 4xx (408, 425, 429): keep the
+        // event on disk for a later drain (#580). Any other 4xx is permanent -
+        // spooling it would retry a rejection forever.
+        if (!resp || hookStatusRetryable(resp.status)) spoolFailedHook(item.url, item.payload);
       } catch (_e) {
         try { spoolFailedHook(item.url, item.payload); } catch (_e2) {}
       }"#;
@@ -9950,10 +9950,10 @@ model = "gpt-5"
                 !source.contains("}).catch(() => undefined);\n      } catch (_e) {"),
                 "{name}: still fire-and-forgets failed deliveries"
             );
-            // ...replaced by capture + spool of network failures and 5xx.
+            // ...replaced by capture + spool of network failures, 5xx and transient 4xx.
             assert!(
                 source.contains(
-                    "if (!resp || resp.status >= 500) spoolFailedHook(item.url, item.payload);"
+                    "if (!resp || hookStatusRetryable(resp.status)) spoolFailedHook(item.url, item.payload);"
                 ),
                 "{name}: missing spool-on-failure"
             );
