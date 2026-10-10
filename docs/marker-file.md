@@ -849,16 +849,24 @@ Two guarantees hold in **both** modes:
 Session-creating events are unaffected in both modes: opening a session in a
 plain non-git folder still names the project after that folder.
 
-Some harnesses keep reporting the parent session's cwd when a subagent uses a
-file tool in another checkout. Native `ai-memory hook` commands compensate for
-that case before applying `follow-cwd` or `sticky`: a fixture-backed file-tool
-schema with absolute target paths is routed from the target when every path
-proves the same repository or marker boundary. The destination's capture
-policy and `server` profile are authoritative, so a cross-project call cannot
-use the source repository's policy or credentials. Relative paths,
-mixed-project calls, unknown schemas, and absolute paths outside a recognized
-repository/marker keep the payload cwd. Free-form shell commands are not
-reinterpreted as project routing instructions. This changes raw observation
+Some harnesses report a cwd other than where a tool ran: a subagent keeps its
+parent session's cwd while using a file tool in another checkout, and Hermes
+Agent always reports its own process directory (usually `~`) while each tool
+call names its repository through `workdir` or `path`. Native `ai-memory hook`
+commands compensate before applying `follow-cwd` or `sticky`: a tool call's
+absolute location — a fixture-backed file tool's target paths, a search/list
+tool's explicit `path`, or a shell command's structured `workdir` — routes the
+event when every path proves the same repository or marker boundary. That
+destination's marker decides allowlist admission, and its capture policy and
+`server` profile apply, so a cross-project call cannot use the source
+repository's credentials. The source's exclusions still bind: if the payload
+cwd's own `ignore_paths` would drop the event (a pattern can name a path
+outside its checkout, and a command can name a source file while its `workdir`
+points elsewhere), the event is not rerouted and that exclusion drops it.
+Relative paths and workdirs, mixed-project calls, unknown schemas, and absolute
+paths outside a recognized repository/marker keep the payload cwd. Free-form
+shell command text is never reinterpreted as a project routing instruction;
+only the structured `workdir` field counts. This changes raw observation
 attribution only; the session row and its compiled session page remain in the
 project where the session began.
 
