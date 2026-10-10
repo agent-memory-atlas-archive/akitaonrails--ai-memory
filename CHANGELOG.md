@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fixed Claude Code's Windows `PowerShell` tool being classified as an
+  unknown tool, so its output never reached the session record and
+  `[capture] ignore_paths` never checked its command. It is now a shell tool
+  like `Bash`, in the native hook, the server, and the generated TypeScript
+  integrations, and the shell argument reader also follows PowerShell's
+  `-Param:value` binding (`Get-Content -Path:docs\adr\x.md`). (#1186)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
