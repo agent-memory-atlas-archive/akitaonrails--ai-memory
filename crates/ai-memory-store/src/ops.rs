@@ -13347,6 +13347,39 @@ pub(crate) mod tests {
         assert_eq!(side("from_workspace_id", &src_ws), 1);
     }
 
+    /// The purge tombstone is keyed on `(session, workspace, project)`, so it
+    /// has to follow a move or a late event recreates the purged session in
+    /// the destination (#387). A session that was never purged is the control.
+    #[test]
+    fn a_purged_session_stays_purged_after_its_project_moves() {
+        let (_tmp, mut conn, src_ws, proj) = fresh_db();
+        let dst_ws = get_or_create_workspace(&mut conn, "destination").unwrap();
+        let (purged, _) = seed_session(&mut conn, src_ws, proj, "target");
+        purge_session(
+            &mut conn,
+            src_ws,
+            proj,
+            purged,
+            None,
+            Compaction::Skip,
+            PurgeMode::Commit,
+        )
+        .unwrap();
+
+        move_project_workspace(&mut conn, &proj, &src_ws, &dst_ws).unwrap();
+
+        let err = begin_session(&mut conn, &hook_session(purged, dst_ws, proj, None))
+            .expect_err("the purge must survive the move");
+        assert!(matches!(err, StoreError::SessionPurged(_)), "got {err:?}");
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM sessions"), 0);
+        begin_session(
+            &mut conn,
+            &hook_session(SessionId::new(), dst_ws, proj, None),
+        )
+        .unwrap();
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM sessions"), 1);
+    }
+
     /// A same-named project already in the destination workspace makes the
     /// projects UPDATE collide with UNIQUE(workspace_id, name); the whole
     /// transaction must roll back, leaving the source intact. The admin

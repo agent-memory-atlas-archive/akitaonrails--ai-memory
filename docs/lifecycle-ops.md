@@ -680,7 +680,8 @@ project, since new sessions started there still resolve by basename unless a
 session (decisions, gotchas: pages are not tracked per session), handoffs the
 session *accepted*, and `auto_improve_proposals` (they have no `session_id`;
 they target pages in the scope they were staged in). `entities` and
-`page_feedback` are not re-stamped either, the same gap `move-project` has.
+`page_feedback` are not re-stamped either, unlike `move-project`, which
+moves the whole project and re-stamps both.
 
 **Order of operations (per session):** validate the destination (404 unless
 `create`), reject a batch whose source is the destination (422; the single
