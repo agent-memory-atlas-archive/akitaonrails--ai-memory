@@ -10,18 +10,19 @@ first balanced JSON object in the reply content to be
 order).
 
 This adapter recognises exactly that request (by the system-prompt prefix),
-scores every candidate with one batched Jev `score` question whose rubric
-mirrors the reranker prompt's own 1.0 / 0.7 / 0.3 / 0.0 guidance, and returns
-the judgement as plain chat content. Everything else — consolidation, lint,
-bootstrap — is reverse-proxied unchanged to the configured upstream, so only
-reranking rides the Jev endpoint.
+asks Jev one batched `choice` question over all candidates, and returns each
+candidate's choice probability as its relevance, as plain chat content. A
+malformed Jev answer (missing or extra keys, non-numbers, values outside
+[0, 1], a distribution that does not sum to ~1) is an error, so ai-memory
+keeps its own order instead of ranking on fabricated scores. Everything else
+(consolidation, lint, bootstrap) is reverse-proxied unchanged to the
+configured upstream, so only reranking rides the Jev endpoint.
 
 Why: a hosted reranker model that answers in tens of seconds dwarfs the rest
-of a `memory_query`. A judge endpoint that scores a fixed rubric answers in
-well under a second, which keeps `AI_MEMORY_RERANKER=llm` usable in
-interactive sessions. On a 102-query golden set (see
-docs/jev-reranker-adapter.md) this adapter matched the hosted reranker's
-hit@1 / MRR / NDCG@10 while cutting mean rerank latency from ~20s to ~0.2s.
+of a `memory_query`, while a judge endpoint answers in well under a second,
+which keeps `AI_MEMORY_RERANKER=llm` usable in interactive sessions.
+docs/jev-reranker-adapter.md has the measurements, including how this choice
+variant compares with the earlier per-candidate rubric adapter.
 
 Env:
   JEV_URL     Jev systemone endpoint      (default http://127.0.0.1:18095/v1/systemone)
