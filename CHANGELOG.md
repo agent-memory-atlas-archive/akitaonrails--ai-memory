@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fixed the Jev choice reranker adapter silently fabricating scores from a
+  malformed judge response: `docs/examples/jev-reranker-adapter/jev_rerank_shim_choice.py`
+  defaulted missing or misnamed `probabilities` entries to `0.0`, so an HTTP
+  200 with a broken payload produced a well-formed but meaningless ranking
+  the server could not tell apart from a real judgement. The shim now
+  validates the response (key set matches the candidate list, no duplicate
+  JSON keys, numeric non-boolean values in `[0, 1]`, NaN/Inf rejected,
+  distribution sum near 1) and answers HTTP 500 on any violation, which is
+  the failure mode ai-memory already degrades safely on. Includes stdlib
+  `unittest` coverage in `test_jev_rerank_shim_choice.py`. (#1198)
+
 ## [2.6.3] - 2026-10-09
 
 ### Fixed

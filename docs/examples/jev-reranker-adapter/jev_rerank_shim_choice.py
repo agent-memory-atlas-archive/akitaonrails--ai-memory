@@ -33,6 +33,7 @@ Stdlib only. No secrets are stored: Authorization headers are forwarded
 verbatim to the upstream.
 """
 import json
+import math
 import os
 import sys
 import time
@@ -63,6 +64,61 @@ def log(msg):
     sys.stderr.flush()
 
 
+def _reject_dupes(pairs):
+    """object_pairs_hook refusing duplicate keys in the Jev response JSON."""
+    d = {}
+    for k, v in pairs:
+        if k in d:
+            raise ValueError(f"duplicate key {k!r} in Jev response")
+        d[k] = v
+    return d
+
+
+def extract_choice_probs(out, cand_ids):
+    """Return one validated choice probability per candidate, in candidate order.
+
+    Raises ValueError on any malformed shape — missing/renamed keys, extra
+    candidates, non-numeric or boolean values, NaN/Inf, out-of-range numbers,
+    or a distribution whose mass is nowhere near 1 — so the caller answers
+    HTTP 500 and ai-memory keeps its original order, instead of silently
+    ranking on fabricated 0.0 scores.
+    """
+    if not cand_ids:
+        raise ValueError("no candidates")
+    if len(set(cand_ids)) != len(cand_ids):
+        raise ValueError("duplicate candidate indices in the rerank request")
+    answers = out.get("answers")
+    if not isinstance(answers, dict):
+        raise ValueError("Jev response has no answers object")
+    best = answers.get("best")
+    if not isinstance(best, dict):
+        raise ValueError("Jev response has no answers.best object")
+    probs = best.get("probabilities")
+    if not isinstance(probs, dict):
+        raise ValueError("Jev response has no answers.best.probabilities object")
+    expected = {f"c{n}" for n in cand_ids}
+    missing = sorted(expected - probs.keys())
+    extra = sorted(probs.keys() - expected)
+    if missing or extra:
+        raise ValueError(
+            f"probability keys mismatch: missing={missing} extra={extra}")
+    vals = []
+    for n in cand_ids:
+        p = probs[f"c{n}"]
+        if isinstance(p, bool) or not isinstance(p, (int, float)):
+            raise ValueError(f"probability c{n} is not a number: {p!r}")
+        p = float(p)
+        if not math.isfinite(p) or p < 0.0 or p > 1.0:
+            raise ValueError(f"probability c{n} outside [0, 1]: {p!r}")
+        vals.append(p)
+    total = math.fsum(vals)
+    # The choice distribution is normalised over the candidate set; allow
+    # generous rounding drift but reject degenerate shapes (all ~0 / all ~1).
+    if not 0.5 <= total <= 1.5:
+        raise ValueError(f"choice probabilities sum to {total:.4f}, not ~1.0")
+    return vals
+
+
 def jev_rerank(payload):
     """Translate a reranker chat request into ONE batched Jev choice call.
 
@@ -79,6 +135,7 @@ def jev_rerank(payload):
                  if m.get("role") == "user"), "")
     data = json.loads(user)
     query, cands = data["query"], data["candidates"]
+    ids = [c["candidate"] for c in cands]
     lines = [f"User query: {query}", "", "Candidate documents:"]
     criteria = {}
     for c in cands:
@@ -100,15 +157,10 @@ def jev_rerank(payload):
     req = urllib.request.Request(JEV_URL, data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=25) as resp:
-        out = json.loads(resp.read())
+        out = json.loads(resp.read(), object_pairs_hook=_reject_dupes)
     dt = time.perf_counter() - t0
-    probs = ((out.get("answers") or {}).get("best") or {}).get("probabilities") or {}
-    scores = []
-    for c in cands:
-        n = c["candidate"]
-        p = probs.get(f"c{n}", 0.0)
-        p = float(p) if isinstance(p, (int, float)) else 0.0
-        scores.append({"candidate": n, "relevance": round(p, 4)})
+    vals = extract_choice_probs(out, ids)
+    scores = [{"candidate": n, "relevance": round(p, 4)} for n, p in zip(ids, vals)]
     log(f"jev-choice {len(cands)} candidates in {dt:.3f}s query={query[:60]!r}")
     return {"scores": scores}
 

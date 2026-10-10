@@ -47,6 +47,15 @@ adapter answers HTTP 500 and ai-memory keeps its own candidate order, the
 same as any provider outage. A judge endpoint that is down degrades to
 "no reranking", never to "no search".
 
+The choice variant also fails closed on a *malformed* answer: an HTTP 200
+whose `probabilities` object is missing, renamed, short of candidates,
+padded with extras, or holds booleans, NaN/Inf, out-of-range numbers, or a
+distribution nowhere near normalised is rejected with 500 as well. The
+older shim defaulted those to `0.0`, which produced a well-formed but
+meaningless score set the server could not distinguish from a real
+judgement. `test_jev_rerank_shim_choice.py` (stdlib `unittest`, no backend
+needed) pins each rejection path.
+
 One cosmetic note: the server logs still show the provider's configured
 model name for reranking (it comes from provider config, not from the
 adapter's reply), so the reranker leg will be attributed to your hosted
