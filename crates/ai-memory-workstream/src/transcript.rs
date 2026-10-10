@@ -3721,8 +3721,12 @@ fn list_crush_sessions(
         &db,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;
-    let mut statement = connection
-        .prepare("SELECT id, updated_at FROM sessions ORDER BY updated_at DESC LIMIT ?1")?;
+    // Sub-agent and title sessions name their session as parent; discovery
+    // skips them for the same reason.
+    let mut statement = connection.prepare(
+        "SELECT id, updated_at FROM sessions WHERE parent_session_id IS NULL \
+         ORDER BY updated_at DESC LIMIT ?1",
+    )?;
     let rows = statement.query_map([limit as i64], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
     })?;
@@ -4850,8 +4854,9 @@ mod tests {
         let connection = Connection::open(repo.join(".crush").join("crush.db")).unwrap();
         connection
             .execute_batch(
-                "CREATE TABLE sessions(id TEXT PRIMARY KEY, updated_at INTEGER NOT NULL);\n\
-                 INSERT INTO sessions VALUES ('above', 1800000000);",
+                "CREATE TABLE sessions(id TEXT PRIMARY KEY, parent_session_id TEXT, \
+                 updated_at INTEGER NOT NULL);\n\
+                 INSERT INTO sessions(id, updated_at) VALUES ('above', 1800000000);",
             )
             .unwrap();
 
@@ -4921,7 +4926,8 @@ mod tests {
         let connection = Connection::open(&db).unwrap();
         connection
             .execute_batch(
-                "CREATE TABLE sessions(id TEXT PRIMARY KEY, updated_at INTEGER NOT NULL);\n\
+                "CREATE TABLE sessions(id TEXT PRIMARY KEY, parent_session_id TEXT, \
+                 updated_at INTEGER NOT NULL);\n\
                  CREATE TABLE messages(\
                     id TEXT PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL,\
                     parts TEXT NOT NULL, updated_at INTEGER NOT NULL,\
@@ -4930,9 +4936,20 @@ mod tests {
             .unwrap();
         for (id, updated) in [("older", 1_700_000_000_i64), ("newer", 1_800_000_000)] {
             connection
-                .execute("INSERT INTO sessions VALUES (?1, ?2)", params![id, updated])
+                .execute(
+                    "INSERT INTO sessions(id, updated_at) VALUES (?1, ?2)",
+                    params![id, updated],
+                )
                 .unwrap();
         }
+        // A sub-agent session, newer than both, is not a session of its own.
+        connection
+            .execute(
+                "INSERT INTO sessions(id, parent_session_id, updated_at) \
+                 VALUES ('child', 'newer', 1900000000)",
+                [],
+            )
+            .unwrap();
         connection
             .execute(
                 "INSERT INTO messages VALUES ('m1', 'newer', 'assistant', ?1, 1, 0)",
