@@ -38,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sub-agent session could be imported as a separate session or chosen for the
   resume. The listing now skips them, as session discovery already did.
   (#1190)
+- Fixed rules titled in a script without ASCII letters (Cyrillic, CJK, Arabic
+  and others) overwriting each other: multi-page consolidation named every such
+  rule page `_rules/rule.md`, so only the last survived in the live rules list.
+  Each rule now gets a `_rules/rule-<hash>.md` name derived from its title. Rule
+  titles in Latin scripts are named as before. A restated non-Latin title
+  (case, spacing or punctuation aside) updates its own page. An existing
+  `_rules/rule.md` is left in place; delete it once its rule is restated.
+  (#1191)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
