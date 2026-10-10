@@ -529,6 +529,13 @@ Additional boundary rules:
   `Added`/`Changed`/`Fixed` heading, past-tense, trailing `(#NNN)`
   reference) and update the relevant README/docs references in the same
   commit. Internal refactors and test-only churn are exempt.
+- **Run the humanizer on new or heavily edited prose.** New documentation,
+  and any large rewrite of existing text (a new doc section, a rewritten guide,
+  a long CHANGELOG entry, an RFC or design note), goes through the `humanizer`
+  skill before it is committed: it strips AI-writing patterns while keeping
+  every fact. Prose only — code blocks, commands, paths, link targets and
+  headings (anchors) stay unchanged, and a rewrite that adds or drops a fact is
+  a defect. Released CHANGELOG sections are frozen and are not rewritten.
 - **Competitor research keeps the comparison docs in sync — never let them
   go stale.** Any new competitor research pass, or a correction to an existing
   one, must land its findings in the comparison docs in the *same* change, not
