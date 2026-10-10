@@ -2177,6 +2177,14 @@ function spoolFailedHook(url: URL | string, payload: Record<string, unknown>): v
   }
 }
 
+// A 5xx, or one of the 4xx a saturated or momentarily unwilling server answers
+// with (408, 425, 429), asks for a retry: the event is fine and a later attempt
+// can land it. Any other 4xx rejects the event for good. The shell, PowerShell
+// and native drains classify the same way.
+function hookStatusRetryable(status: number): boolean {
+  return status >= 500 || status === 408 || status === 425 || status === 429;
+}
+
 let spoolDrainPromise: Promise<void> | undefined;
 
 function requestSpoolDrain(): void {
@@ -2213,11 +2221,11 @@ async function drainHookSpool(): Promise<void> {
         signal: timeoutSignal(2000),
       }).catch(() => undefined);
       if (!resp) return; // still unreachable; stop, keep the backlog
-      if (resp.ok || (resp.status >= 400 && resp.status < 500)) {
+      if (resp.ok || (resp.status >= 400 && resp.status < 500 && !hookStatusRetryable(resp.status))) {
         // Delivered, or permanently rejected - either way, done with it.
         try { unlinkSync(file); } catch (_e) {}
       } else {
-        return; // 5xx: server unhappy; retry a later drain
+        return; // 5xx or a transient 4xx: server unhappy; retry a later drain
       }
     } catch (_e) {
       return;
@@ -2280,6 +2288,16 @@ pub(crate) fn assert_shared_ts_delivery_runtime(name: &str, source: &str) {
     assert!(
         source.contains("anyFactory([hookAbort.signal, factory(ms)])"),
         "{name}: request deadlines must also honour hookAbort"
+    );
+    assert!(
+        source.contains(
+            "return status >= 500 || status === 408 || status === 425 || status === 429;"
+        ),
+        "{name}: a transient 4xx must stay retryable like a 5xx"
+    );
+    assert!(
+        source.contains("resp.status < 500 && !hookStatusRetryable(resp.status)"),
+        "{name}: the drain must keep an entry the server only asked to retry"
     );
 }
 
