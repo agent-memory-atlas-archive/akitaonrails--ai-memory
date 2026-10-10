@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hook session proceeds. `memory_message_list` always reports `resolved_scope`,
   `scope_source` and a hint when it inferred the project, and the SessionStart
   inbox notice and `memory_briefing` (new `scope` field) name the inbox to pass.
+  (#1197)
 - Fixed a purged session coming back. `purge-session` leaves a tombstone so a
   late event cannot recreate the session, but live hook ingest creates its
   session row on a path that never checked it, so the next event for a purged
