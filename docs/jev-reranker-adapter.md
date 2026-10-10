@@ -6,8 +6,8 @@
 [`AI_MEMORY_RERANKER=llm`](llm-providers.md) reorders `memory_query`
 candidates with the configured chat provider. That works until the provider
 is a hosted reasoning model: the reranker prompt is long, a graded judgement
-over up to 30 candidates, and a slow model answers in tens of seconds —
-longer than one `memory_query` should ever take, and long enough to trip the
+over up to 30 candidates, and a slow model answers in tens of seconds.
+That is longer than one `memory_query` should ever take, and long enough to trip the
 server's completion timeout, which turns the reranker into a dead feature
 that stalls every query before falling back to the original order.
 
@@ -37,8 +37,8 @@ configuration; it splits traffic by request shape:
 3. Each answer's rubric index maps back to `relevance` 0.0 / 0.3 / 0.7 /
    1.0 (index / 3), and the adapter returns
    `{"scores": [{"candidate": n, "relevance": f}]}` as plain chat-completion
-   content — the exact shape the reranker's tolerant parser expects.
-4. Every other request — consolidation, lint, bootstrap, plain chats — is
+   content, which is the exact shape the reranker's tolerant parser expects.
+4. Every other request (consolidation, lint, bootstrap, plain chats) is
    reverse-proxied to the real upstream byte-for-byte, `Authorization`
    forwarded verbatim. The adapter stores no secrets.
 
@@ -125,7 +125,7 @@ max 3.07 s), 110/110 rerank translations served, 0 adapter failures. The
 gap to the offline arm is candidate-pool shape, not scoring: the live
 server over-fetches 15–30 candidates with its own bounded snippets (the
 offline arm rescored a fixed top-10 pool), and in 32 of 34 non-top-1
-queries the expected page was still returned — mostly at rank 2 — with
+queries the expected page was still returned, mostly at rank 2, with
 hit@5 at 0.949. Versus the no-reranker baseline that is +16.2 points
 hit@1 and +10.4 points NDCG@10 end to end.
 
@@ -147,7 +147,7 @@ On a 30-candidate pool that wording moved the 35B from 0.828 to 0.879 hit@1
 below is the earlier choice-versus-rubric comparison, not that wording test.
 
 That is deliberately the substitution the caveat below used to warn about.
-It is sound here because the reranker's consumer is **sort-only**: the
+It is sound here because the reranker's consumer is sort-only: the
 server reorders candidates by `relevance` and never thresholds or sums its
 absolute value, and a per-question monotonic map preserves order exactly.
 The old warning applies to consumers that *read* absolute relevance
@@ -175,7 +175,7 @@ judge, the choice adapter is the difference between usable and not.
 
 Prefer the choice adapter when the reranker leg is the only consumer.
 Keep the rubric adapter if anything downstream reads absolute relevance
-grades (thresholding, logging heuristics, score fusion) — choice
+grades (thresholding, logging heuristics, score fusion), because choice
 probabilities carry no absolute meaning and their scale shifts with
 candidate count.
 

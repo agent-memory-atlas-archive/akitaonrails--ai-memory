@@ -3,20 +3,20 @@
 ai-memory is single-tenant wiki data with optional multi-user attribution, run
 by parallel harnesses and shared teams. A handful of guards keep one project,
 workspace, operator, or untrusted input from crossing into another. Each guard
-is only as good as a test that **actively tries to break it** — a happy-path or
+is only as good as a test that **actively tries to break it**. A happy-path or
 single-tenant test cannot see an isolation defect, so a regression that removes
 the guard would pass CI silently.
 
 This file is the source of truth for which boundaries exist, where each is
 enforced, and the adversarial test that would fail if the guard were removed.
-**Keep it current** (see the protocol at the end) — it is referenced by the
-AGENTS.md "security-boundary tests" rule.
+**Keep it current** (see the protocol at the end); the AGENTS.md
+"security-boundary tests" rule refers to it.
 
-An adversarial test = *attempt the violation and assert refusal, plus a
-legitimate control case* (so a blanket deny is not mistaken for a working
-guard). Coverage verdicts: **STRONG** = a test would fail if the guard were
-deleted; **PARTIAL** = only some paths of the guard are probed; **FUTURE** =
-boundary not yet built.
+An adversarial test attempts the violation and asserts refusal, and also runs a
+legitimate control case so a blanket deny is not mistaken for a working guard.
+Coverage verdicts: **STRONG** means a test would fail if the guard were
+deleted; **PARTIAL** means only some paths of the guard are probed; **FUTURE**
+means the boundary is not built yet.
 
 ## Boundary map
 
@@ -97,8 +97,8 @@ boundary not yet built.
 ## Keeping this current (the standing protocol)
 
 1. **Touch a guard, add/extend its adversarial test.** Any change to code in the
-   "Enforcing code" column — or that adds a new read/write/admin/hook entry
-   point past one of these guards — must add or extend an adversarial test that
+   "Enforcing code" column, or that adds a new read/write/admin/hook entry
+   point past one of these guards, must add or extend an adversarial test that
    would fail if the guard were removed, and update this file's row.
 2. **New boundary → new row + tests before merge.** Adding an isolation
    dimension (a new tenancy axis, a new capability, a new cross-scope surface)
@@ -106,11 +106,12 @@ boundary not yet built.
 3. **A raw-id or unscoped entry point is guilty until tested.** Any handler that
    takes a bare `session_id`/`run_id`/`page_id`/message id, or fans out across
    projects (`global=true`, global `recent`, search), bypasses scope resolution
-   by construction — it must resolve→authorize (or filter-before-`LIMIT`) and
+   by construction. It must resolve→authorize (or filter-before-`LIMIT`) and
    carry an adversarial test proving a foreign id/scope is refused.
 4. **Prove the test bites.** An adversarial test that still passes when the guard
-   is deleted is not a guard test. Confirm fail-without-guard / pass-with-guard.
+   is deleted is not a guard test. Confirm that it fails without the guard and
+   passes with it.
 5. Unit tests exercise one session/tenant at a time and cannot see these
-   defects — the guards live at integration level (`multi_session.rs`,
+   defects, so the guards live at integration level (`multi_session.rs`,
    `handoff_ownership.rs`, `agent_messages.rs`, `active_project` pointer tests,
    the MCP permission suites). Put boundary tests there.

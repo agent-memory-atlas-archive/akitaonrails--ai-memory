@@ -1,6 +1,6 @@
 # ai-memory-wikisync
 
-Read-only **team-wiki export** companion for
+Read-only team-wiki export companion for
 [ai-memory](https://github.com/akitaonrails/ai-memory) (issue #986,
 slice 1). It pulls explicitly allowlisted page families from a running
 ai-memory server through the public, read-only `/api/v1` surface into a
@@ -32,8 +32,8 @@ ai-memory-wikisync export ... --apply
 
 - `plan` never writes, not even the state file.
 - `export --apply` writes/updates markdown files under `--dest` and prints
-  the `git add` / `git commit` / `git push` commands you may run yourself —
-  the tool never runs git, never commits, never pushes.
+  the `git add` / `git commit` / `git push` commands you may run yourself.
+  The tool never runs git, never commits, and never pushes.
 - `--include FAMILY` is a strict, explicit allowlist of top-level wiki
   directories (`_rules`, `decisions`, …). At least one is required and a
   bare `*` is refused: only what you name is exported.
@@ -43,16 +43,16 @@ ai-memory-wikisync export ... --apply
 
 ## What it writes
 
-Exactly the server's canonical page projection: `path`, `title`, `body`.
+It writes exactly the server's canonical page projection: `path`, `title`, `body`.
 The page body (which carries its own `# H1` title) is transported
 verbatim. The tool never forges attribution, generated, or sync
 frontmatter into page files.
 
-All local bookkeeping lives in **one** state file,
+All local bookkeeping lives in one state file,
 `.ai-memory-wikisync/state.json` (mode 0600, atomically replaced after
 each successful write batch): per page, the SHA-256 of the bytes last
 written plus the server `ETag` observed at that write. Nothing else is
-stored — no tokens, no server credentials.
+stored: no tokens and no server credentials.
 
 The state is per clone. The state directory carries a `.gitignore` of `*`,
 so committing the destination never commits the state: two clones that
@@ -75,22 +75,22 @@ state; untrack it once with
   `--dest`; case-fold collisions are refused; symlinked destinations,
   symlinked components and symlinked state directories are refused; files
   are replaced atomically (tmp + rename + fsync).
-- **Local edits win until forced.** Each page is classified three ways —
+- **Local edits win until forced.** Each page is compared three ways:
   destination file, last exported state, server body. A file that
-  diverged from both is reported with a diff summary and **refused**; the
-  whole batch is refused, nothing is written. `--force` overwrites the
+  diverged from both is reported with a diff summary and refused; the
+  whole batch is then refused and nothing is written. `--force` overwrites the
   divergent files with server content.
-- **Never deletes.** Local files — including brand-new local files inside
-  an allowlisted family — are never deleted. Deletes are slice 4.
-- **Untrusted content.** Page bodies are data: transported verbatim,
-  never executed, never rendered, never interpreted. Paths that would
+- **Never deletes.** Local files are never deleted, including brand-new
+  local files inside an allowlisted family. Deletes are slice 4.
+- **Untrusted content.** Page bodies are data. They are transported
+  verbatim and never executed, rendered, or interpreted. Paths that would
   escape `--dest` are refused.
 
 ## Roadmap (#986)
 
 This is slice 1 of the accepted team-wiki sync plan:
 
-1. **This release — read-only export** into a project repository.
+1. This release: read-only export into a project repository.
 2. Conditional mutation seam (compare-and-write) in core, if independently
    justified.
 3. Bidirectional apply (repo edits flow back through public write tools).
