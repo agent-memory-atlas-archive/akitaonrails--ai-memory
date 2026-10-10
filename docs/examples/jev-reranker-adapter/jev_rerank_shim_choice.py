@@ -87,6 +87,8 @@ def extract_choice_probs(out, cand_ids):
         raise ValueError("no candidates")
     if len(set(cand_ids)) != len(cand_ids):
         raise ValueError("duplicate candidate indices in the rerank request")
+    if not isinstance(out, dict):
+        raise ValueError("Jev response is not a JSON object")
     answers = out.get("answers")
     if not isinstance(answers, dict):
         raise ValueError("Jev response has no answers object")

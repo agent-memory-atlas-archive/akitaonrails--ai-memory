@@ -4,10 +4,13 @@
 Run from this directory:  python3 -m unittest test_jev_rerank_shim_choice -v
 Stdlib only, no Jev backend required (HTTP is monkeypatched).
 """
+import http.client
 import io
 import json
+import threading
 import unittest
 import unittest.mock
+from http.server import ThreadingHTTPServer
 
 import jev_rerank_shim_choice as shim
 
@@ -50,6 +53,11 @@ class ExtractChoiceProbsTest(unittest.TestCase):
     def test_missing_probabilities_object(self):
         with self.assertRaises(ValueError):
             shim.extract_choice_probs({"answers": {"best": {}}}, self.IDS)
+
+    def test_non_object_response_rejected(self):
+        for bad in ([], "c1", 0.5, None):
+            with self.assertRaisesRegex(ValueError, "not a JSON object"):
+                shim.extract_choice_probs(bad, self.IDS)
 
     def test_missing_answers(self):
         with self.assertRaises(ValueError):
@@ -127,10 +135,20 @@ class DuplicateJsonKeyTest(unittest.TestCase):
 
 class JevRerankEndToEndTest(unittest.TestCase):
     def run_shim(self, response_json):
-        fake = FakeResp(json.dumps(response_json).encode())
+        return self.run_shim_raw(json.dumps(response_json).encode())
+
+    def run_shim_raw(self, raw):
         with unittest.mock.patch.object(shim.urllib.request, "urlopen",
-                                        return_value=fake):
+                                        return_value=FakeResp(raw)):
             return shim.jev_rerank(rerank_payload())
+
+    def test_duplicate_json_key_in_response_raises(self):
+        # Last-wins parsing would read c1=0.1 and accept a valid-looking
+        # distribution; the shim must refuse the ambiguous payload instead.
+        raw = (b'{"answers": {"best": {"probabilities": '
+               b'{"c1": 0.9, "c1": 0.1, "c2": 0.5, "c3": 0.4}}}}')
+        with self.assertRaisesRegex(ValueError, "duplicate key"):
+            self.run_shim_raw(raw)
 
     def test_valid_response_maps_scores(self):
         out = self.run_shim(jev_response({"c1": 0.1, "c2": 0.7, "c3": 0.2}))
@@ -150,6 +168,42 @@ class JevRerankEndToEndTest(unittest.TestCase):
     def test_200_with_wrong_shape_raises(self):
         with self.assertRaises(ValueError):
             self.run_shim({"answers": {"best": {"choice": "c1"}}})
+
+
+class HandlerFailClosedTest(unittest.TestCase):
+    """The documented contract: a malformed judge answer becomes HTTP 500."""
+
+    def post_rerank(self, jev_json):
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), shim.Handler)
+        thread = threading.Thread(
+            target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join)
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        fake = FakeResp(json.dumps(jev_json).encode())
+        conn = http.client.HTTPConnection(*srv.server_address, timeout=5)
+        self.addCleanup(conn.close)
+        with unittest.mock.patch.object(shim.urllib.request, "urlopen",
+                                        return_value=fake), \
+                unittest.mock.patch.object(shim, "log"):
+            conn.request("POST", "/v1/chat/completions",
+                         body=json.dumps(rerank_payload()),
+                         headers={"Content-Type": "application/json"})
+            resp = conn.getresponse()
+            return resp.status, resp.read()
+
+    def test_malformed_probabilities_answer_500(self):
+        status, _ = self.post_rerank(jev_response({"c1": 0.9}))
+        self.assertEqual(status, 500)
+
+    def test_valid_probabilities_answer_200_with_scores(self):
+        status, body = self.post_rerank(
+            jev_response({"c1": 0.1, "c2": 0.7, "c3": 0.2}))
+        self.assertEqual(status, 200)
+        content = json.loads(body)["choices"][0]["message"]["content"]
+        self.assertEqual(json.loads(content)["scores"][1],
+                         {"candidate": 2, "relevance": 0.7})
 
 
 if __name__ == "__main__":
