@@ -6026,11 +6026,14 @@ pub fn purge_session(
     // Profile evidence harvested from this session's prompts. A candidate
     // keeps the user's own sentence (`statement`, `quote`), so one left behind
     // would let a later convergence write that sentence into a profile page.
+    // Not scoped to this project: the harvest files a candidate under the
+    // project of the prompt it came from, and a prompt this session recorded
+    // in another project is deleted with it by the `observations` cascade
+    // (`collateral_observations_deleted`). A session id names one session, so
+    // `session:<id>` matches only this session's evidence.
     tx.execute(
-        "DELETE FROM profile_candidates \
-          WHERE source_kind = 'prompt' AND source_ref = ?1 \
-            AND workspace_id = ?2 AND project_id = ?3",
-        rusqlite::params![format!("session:{session_id}"), &wid[..], &pid[..]],
+        "DELETE FROM profile_candidates WHERE source_kind = 'prompt' AND source_ref = ?1",
+        rusqlite::params![format!("session:{session_id}")],
     )?;
 
     // Tombstone before the row goes, in the same transaction: a purge that
@@ -10096,14 +10099,22 @@ pub(crate) mod tests {
 
     /// The cross-project profile keeps the user's own sentence from a prompt
     /// in `profile_candidates`, keyed `session:<id>`. Purging the session must
-    /// take that evidence with it. A sibling session's candidate, a page
-    /// candidate and the same session id in another project are the controls.
+    /// take that evidence with it, including the candidate harvested from a
+    /// prompt the session recorded in another project: the purge deletes that
+    /// observation through the cascade, so its sentence must not outlive it.
+    /// A sibling session's candidates (in both projects) and a page candidate
+    /// are the controls.
     #[test]
     fn purge_session_deletes_the_profile_candidates_harvested_from_it() {
         let (_tmp, mut conn, ws, proj) = fresh_db();
         let other = get_or_create_project(&mut conn, &ws, "other", None).unwrap();
         let (purged, _) = seed_session(&mut conn, ws, proj, "target");
         let (sibling, _) = seed_session(&mut conn, ws, proj, "sibling");
+        // A prompt the purged session recorded in `other` (follow-cwd routing).
+        let mut stray = hook_observation(&hook_session(purged, ws, proj, None));
+        stray.project_id = other;
+        stray.body = "obs-in-other-project".into();
+        insert_observation(&mut conn, &stray).unwrap();
         let candidate = |project: ProjectId, kind: &str, source_ref: String| {
             conn.execute(
                 "INSERT INTO profile_candidates \
@@ -10118,8 +10129,9 @@ pub(crate) mod tests {
         candidate(proj, "prompt", format!("session:{sibling}"));
         candidate(proj, "page", "page:_rules/keep.md".into());
         candidate(other, "prompt", format!("session:{purged}"));
+        candidate(other, "prompt", format!("session:{sibling}"));
 
-        purge_session(
+        let summary = purge_session(
             &mut conn,
             ws,
             proj,
@@ -10129,6 +10141,7 @@ pub(crate) mod tests {
             PurgeMode::Commit,
         )
         .unwrap();
+        assert_eq!(summary.collateral_observations_deleted, 1);
 
         let remaining: Vec<(Vec<u8>, String)> = {
             let mut stmt = conn
@@ -10144,7 +10157,7 @@ pub(crate) mod tests {
             [
                 (proj.as_bytes().to_vec(), format!("session:{sibling}")),
                 (proj.as_bytes().to_vec(), "page:_rules/keep.md".to_owned()),
-                (other.as_bytes().to_vec(), format!("session:{purged}")),
+                (other.as_bytes().to_vec(), format!("session:{sibling}")),
             ]
         );
     }
