@@ -2921,6 +2921,48 @@ mod tests {
         assert!(pre.body_excerpt.is_some_and(|body| !body.is_empty()));
     }
 
+    /// Claude Code's Windows `PowerShell` tool shares Bash's payload shape but
+    /// fell through to the unknown family, so its output was never stored
+    /// (#1186). The PreToolUse body still never carries the command.
+    #[test]
+    fn claude_code_powershell_tool_keeps_its_family_title_and_output() {
+        let post = HookEnvelope::from_query_and_body(
+            HookQuery {
+                event: "post-tool-use".into(),
+                agent: Some("claude-code".into()),
+                ..Default::default()
+            },
+            serde_json::json!({
+                "session_id": "s",
+                "tool_name": "PowerShell",
+                "tool_input": {"command": "Get-ChildItem SENTINEL_COMMAND", "description": "list"},
+                "tool_response": {"stdout": "MARKER_POWERSHELL_1186", "stderr": ""},
+                "tool_use_id": "toolu_1186",
+            }),
+        );
+        assert_eq!(post.title_hint.as_deref(), Some("tool non-file"));
+        let body = post.body_excerpt.expect("powershell post-tool body");
+        assert!(body.contains("tool_family: non-file"), "{body:?}");
+        assert!(body.contains("MARKER_POWERSHELL_1186"), "{body:?}");
+
+        let pre = HookEnvelope::from_query_and_body(
+            HookQuery {
+                event: "pre-tool-use".into(),
+                agent: Some("claude-code".into()),
+                ..Default::default()
+            },
+            serde_json::json!({
+                "session_id": "s",
+                "tool_name": "PowerShell",
+                "tool_input": {"command": "Get-ChildItem SENTINEL_COMMAND"},
+                "tool_use_id": "toolu_1186",
+            }),
+        );
+        assert_eq!(pre.title_hint.as_deref(), Some("tool non-file"));
+        let body = pre.body_excerpt.expect("powershell pre-tool body");
+        assert!(!body.contains("SENTINEL_COMMAND"), "{body:?}");
+    }
+
     /// Grok Build CLI posts a `PostToolUse` with Claude Code's snake_case
     /// aliases (`tool_name` / `tool_input` / `tool_use_id`). It was absent from
     /// both `closed_tool_agent` and the `tool_observation_metadata` match, so
