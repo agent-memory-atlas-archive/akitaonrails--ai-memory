@@ -68,6 +68,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   warned that both were missing. The installer now installs the scripts each
   bundle ships, and a test checks every script-based agent against the
   repository bundles. (#1185)
+- Fixed Kiro CLI tool calls being stored with no title or content: Kiro's
+  `PreToolUse` and `PostToolUse` hooks carry `tool_name` and `tool_input`
+  (plus `tool_response` after the call), and the capture policy already read
+  them, but Kiro was missing from the tool-capture mapping, so every Kiro tool
+  observation reached the store with a generic title and an empty body. They
+  now get the same tool-family title and output summary as Claude Code's.
+  (#1187)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
