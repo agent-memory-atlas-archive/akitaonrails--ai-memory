@@ -1732,9 +1732,19 @@ fn slugify_for_rule(title: &str) -> String {
         // A title with no ASCII letter or digit (Cyrillic, CJK, ...) would
         // share one name with every other such title, and each rule would
         // overwrite the last. Name it after the title instead. A title with
-        // no letter or digit at all has nothing to name it by.
-        if decomposed.chars().any(char::is_alphanumeric) {
-            let digest = Sha256::digest(decomposed.trim().as_bytes());
+        // no letter or digit at all has nothing to name it by. The hash takes
+        // the same fold as the ASCII slug (lower-cased words, separators
+        // collapsed) so a restated rule updates its own page; combining
+        // marks stay with their letter so `й` and `и` remain distinct.
+        let in_word = |c: char| c.is_alphanumeric() || ('\u{0300}'..='\u{036F}').contains(&c);
+        let key = decomposed
+            .split(|c: char| !in_word(c))
+            .filter(|word| !word.is_empty())
+            .map(str::to_lowercase)
+            .collect::<Vec<_>>()
+            .join("-");
+        if key.chars().any(char::is_alphanumeric) {
+            let digest = Sha256::digest(key.as_bytes());
             let hex: String = digest
                 .iter()
                 .take(4)
@@ -3254,6 +3264,15 @@ mod tests {
         assert_eq!(
             slugify_for_rule("\u{439}\u{43e}"),
             slugify_for_rule("\u{438}\u{306}\u{43e}")
+        );
+        // A restated title updates its own page, as an ASCII one does: case,
+        // spacing and punctuation do not name a new rule.
+        assert_eq!(slugify_for_rule("не коммитить  секреты!"), russian);
+        assert_eq!(slugify_for_rule("НЕ КОММИТИТЬ, СЕКРЕТЫ."), russian);
+        // A combining mark is part of its letter, not a separator.
+        assert_ne!(
+            slugify_for_rule("\u{439}\u{43e}"),
+            slugify_for_rule("\u{438} \u{43e}")
         );
         for slug in [chinese, russian] {
             let path = format!("_rules/{slug}.md");
