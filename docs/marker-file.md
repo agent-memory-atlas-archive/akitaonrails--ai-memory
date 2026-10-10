@@ -854,8 +854,8 @@ parent session's cwd while using a file tool in another checkout, and Hermes
 Agent always reports its own process directory (usually `~`) while each tool
 call names its repository through `workdir` or `path`. Native `ai-memory hook`
 commands compensate before applying `follow-cwd` or `sticky`: a tool call's
-absolute location — a fixture-backed file tool's target paths, a search/list
-tool's explicit `path`, or a shell command's structured `workdir` — routes the
+absolute location (a fixture-backed file tool's target paths, a search/list
+tool's explicit `path`, or a shell command's structured `workdir`) routes the
 event when every path proves the same repository or marker boundary. That
 destination's marker decides allowlist admission, and its capture policy and
 `server` profile apply, so a cross-project call cannot use the source

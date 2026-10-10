@@ -301,7 +301,7 @@ therefore travel together; the reroute is refused when the harness cwd's own
 capture policy would not keep the event, so the source's exclusions still
 apply. Relative, mixed-project, unsupported, and non-project targets keep the
 harness cwd. Session identity and compiled-session ownership do not move; only
-the raw observations are attributed to the touched project (#932, #1199 —
+the raw observations are attributed to the touched project (#932; #1199:
 Hermes reports its process cwd and locates each tool by `workdir`/`path`).
 
 Antigravity CLI has no native SessionStart event. Its `PreInvocation` hook
