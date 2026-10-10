@@ -608,6 +608,13 @@ diagram, crate breakdown, schema notes, and invariants.
 | [`docs/external-lifecycle.md`](docs/external-lifecycle.md) | External lifecycle producers: per-execution native capture suppression, preserved handoffs, batch ingestion and stable retry identity. |
 | [`docs/auto-improvement-loop.md`](docs/auto-improvement-loop.md) | Auto-improvement design notes: scheduled review, auto-approval default, manual review opt-in, pending proposal storage, and curator work. |
 
+### Community articles
+
+Written by users; not maintained here, so check them against the version you run.
+
+- [Installing and configuring ai-memory on Linux](https://www.linuxpro.com.br/2026/09/ai-memory-instalar-configurar-agentes-linux/) (pt-BR, LinuxPro, covers v2.6.3)
+- [ai-memory from v2.4 to v2.6.3](https://www.linuxpro.com.br/2026/10/ai-memory-a-evolucao-da-2-4-a-2-6-3/) (pt-BR, LinuxPro)
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
