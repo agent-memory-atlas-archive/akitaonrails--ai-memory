@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fixed Hermes Agent tool events being dropped under `capture_mode =
+  allowlist`. Hermes reports its own process directory (usually `~`) as the
+  payload `cwd` and points each tool at a repository with an absolute
+  `workdir` or `path`, so the marker lookup never found the repository's
+  `.ai-memory.toml`. The native `ai-memory hook` now also routes a shell
+  command by its absolute `workdir` and a search/list tool by its absolute
+  `path`, alongside the file-tool targets it already followed, when that
+  location proves one other repository or marker; relative locations still
+  keep the payload `cwd`. A reroute is now refused when the payload `cwd`'s own
+  `[capture] ignore_paths` would drop the event, so an exclusion that names a
+  path outside its checkout, or a source file read by a command whose
+  `workdir` points at another project, is no longer judged only by the
+  destination's policy. (#1199)
+
 ## [2.6.3] - 2026-10-09
 
 ### Fixed

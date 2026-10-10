@@ -1392,7 +1392,14 @@ the block and let Hermes accept it.
 Two events are wired: `pre_tool_call` → `pre-tool-use` and `post_tool_call` →
 `post-tool-use`. Their payload carries `tool_name` / `tool_input`, which is what
 gives Hermes sessions tool observations, tool-family titles, and
-`[capture] ignore_paths` exclusion enforcement.
+`[capture] ignore_paths` exclusion enforcement. Hermes reports its own process
+directory (usually `~`) as the payload `cwd`, so the hook finds the project's
+`.ai-memory.toml` from each tool's absolute location instead: `terminal`'s
+`workdir`, a file tool's `path`, or `search_files`' `path`. A tool call with no
+absolute location (a relative `workdir`, the default `search_files` path)
+stays with the process directory and, under `capture_mode = allowlist`, is
+captured only if that directory carries a marker. See
+[marker-file.md](marker-file.md) for the routing rules.
 
 Session lifecycle is deliberately not wired here: automatic recall, prompt
 capture, session-end and the automatic handoff for Hermes belong to the memory

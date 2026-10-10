@@ -293,12 +293,16 @@ normalises them to exactly one of these `ObservationKind` values:
 | `other` | Unknown or unsupported hook event. |
 
 Native hook clients correct one otherwise invisible cross-project case before
-spooling: if a recognized file-tool payload names only absolute paths in one
-other repository/marker boundary, that destination becomes the event cwd.
-Destination capture policy, server profile, and scope therefore travel
-together. Relative, mixed-project, unsupported, and non-project targets keep
-the harness cwd. Session identity and compiled-session ownership do not move;
-only the raw observations are attributed to the touched project (#932).
+spooling: if a recognized tool payload's absolute location (file-tool targets,
+a search/list tool's `path`, or a shell command's `workdir`) lies in one other
+repository/marker boundary, that destination becomes the event cwd.
+Destination capture policy, allowlist marker, server profile, and scope
+therefore travel together; the reroute is refused when the harness cwd's own
+capture policy would not keep the event, so the source's exclusions still
+apply. Relative, mixed-project, unsupported, and non-project targets keep the
+harness cwd. Session identity and compiled-session ownership do not move; only
+the raw observations are attributed to the touched project (#932, #1199 —
+Hermes reports its process cwd and locates each tool by `workdir`/`path`).
 
 Antigravity CLI has no native SessionStart event. Its `PreInvocation` hook
 fires before every model call, so the bridge maps only the documented
