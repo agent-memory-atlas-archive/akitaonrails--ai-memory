@@ -2639,14 +2639,17 @@ fn locate_session_file(
 /// The transcripts a session lookup reads, in the order it reads them, up to a
 /// fixed number. A store can hold more than that, and the directory walk lists
 /// them in no useful order, so the order decides which sessions can be found.
-/// Temporary copies go last. Codex, Pi, OMP and Grok put the session id in the
-/// transcript's file or directory name, so a transcript that names it comes
-/// first. The rest follow newest first, as discovery and listing do.
+/// Codex, Pi, OMP and Grok put the session id in the transcript's file or
+/// directory name, so a transcript that names it comes first. Within each
+/// group temporary copies go last; naming ranks above that because OMP can
+/// leave a session only as an atomic-write temp, which a store-wide
+/// temporary-last rule would push past the cap. The rest follow newest
+/// first, as discovery and listing do.
 fn lookup_candidates(mut files: Vec<PathBuf>, id: &str) -> Vec<PathBuf> {
     files.sort_by_cached_key(|path| {
         (
-            temporary_transcript(path),
             !names_session(path, id),
+            temporary_transcript(path),
             Reverse(modified(path)),
             path.clone(),
         )
@@ -5104,9 +5107,17 @@ mod tests {
         let candidates = lookup_candidates(vec![decoy(1), decoy(2), grok.clone()], id);
         assert_eq!(candidates.first(), Some(&grok));
 
+        // The real transcript still wins over its own temporary copy, but a
+        // temporary copy that names the id outranks every unrelated
+        // transcript: OMP can leave a session only as an atomic-write temp.
         let temporary = root.join(format!("{id}.jsonl.1a2b.tmp"));
         let candidates = lookup_candidates(vec![temporary.clone(), decoy(1), named.clone()], id);
-        assert_eq!(candidates, [named, decoy(1), temporary]);
+        assert_eq!(candidates, [named, temporary.clone(), decoy(1)]);
+
+        let mut files = (0..2_500).map(&decoy).collect::<Vec<_>>();
+        files.push(temporary.clone());
+        let candidates = lookup_candidates(files, id);
+        assert_eq!(candidates.first(), Some(&temporary));
     }
 
     #[test]
