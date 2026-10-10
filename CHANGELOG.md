@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-stamped with the project's other tables, so the moved project lost its
   pending mail, its entity retrieval and open feedback findings, and a purged
   session could be recreated. They now move in the same transaction. (#1196)
+- Fixed a Codex, Pi, OMP or Grok session going missing once its store held more
+  than 2,000 transcripts. Looking a session up by id read the first 2,000 files
+  in directory-walk order, so the rest came back as not found: `ai-memory run`
+  dropped the linked session and started a fresh one, and a transcript import
+  failed. The lookup now reads the transcript that names the session id first,
+  then the newest. (#1189)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`
