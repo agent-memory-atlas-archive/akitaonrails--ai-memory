@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Fixed Zero's `sessionEnd` never delivering spooled events even with
+  network allowed in Zero's sandbox. Zero kills a hook's detached children
+  when the hook exits, which took the background drainer down with it. For
+  Zero, `session-end` now drains in-process within a fixed 10-second budget
+  (hard stop at 20 seconds, inside Zero's 30-second hook timeout); events
+  that cannot be delivered stay spooled. Other agents keep the detached
+  drainer. (#1172)
 - Fixed generated TypeScript integrations (OpenCode, OpenCode 2, OMP,
   Pi, OpenClaw) flashing a console window on Windows.
   `discoverRemoteIdentity` spawned `git config --get remote.<name>.url`

@@ -6364,8 +6364,10 @@ pub(crate) fn zero_install_notes(data_dir: impl std::fmt::Display) -> String {
          #         \"sandbox\": {{\"network\": \"allow\",\n\
          #                     \"additionalWriteRoots\": [\"{}\"]}}\n\
          #       (network allow applies to every Zero shell command), or\n\
-         #       \"sandbox\": {{\"enabled\": false}}. Otherwise run `ai-memory\n\
-         #       hook-drain` from a normal shell to deliver spooled events.\n",
+         #       \"sandbox\": {{\"enabled\": false}}. With network allowed,\n\
+         #       sessionEnd delivers in-process (the sandbox kills detached\n\
+         #       drainers). Otherwise run `ai-memory hook-drain` from a\n\
+         #       normal shell to deliver spooled events.\n",
         data_dir
     )
 }
@@ -8314,6 +8316,7 @@ command = "AI_MEMORY_HOOK_URL=http://h AI_MEMORY_PROJECT_STRATEGY=repo-root /x/a
         );
         assert!(notes.contains(r#""enabled": false"#), "{notes}");
         assert!(notes.contains("hook-drain"), "{notes}");
+        assert!(notes.contains("sessionEnd delivers in-process"), "{notes}");
         assert!(notes.lines().all(|l| l.starts_with('#')), "{notes}");
     }
 
