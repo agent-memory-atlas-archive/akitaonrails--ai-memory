@@ -7599,6 +7599,78 @@ mod tests {
         assert_eq!((metrics.dropped_invalid, metrics.failed), (1, 0));
     }
 
+    /// The batch endpoint is fail-fast: an unclassified error stops the drain
+    /// and leaves that item and everything behind it in the client's spool.
+    /// A purged session's late event must be a terminal `dropped_invalid` so
+    /// the next item still commits (#387).
+    #[tokio::test]
+    async fn batch_drops_a_purged_session_then_commits_next_item() {
+        let tmp = TempDir::new().unwrap();
+        let state = Arc::new(make_state(&tmp).await);
+        let env = session_envelope("user-prompt-submit", "batch-purged", "/tmp/scratch");
+        let purged = resolve_session_id(&env).unwrap();
+        process(&state, env, None, Vec::new()).await.unwrap();
+        let (ws, proj, _) = state
+            .reader
+            .find_session_scope(purged)
+            .await
+            .unwrap()
+            .unwrap();
+        state
+            .writer
+            .purge_session(
+                ws,
+                proj,
+                purged,
+                None,
+                ai_memory_store::Compaction::Skip,
+                ai_memory_store::PurgeMode::Commit,
+            )
+            .await
+            .unwrap();
+
+        let items = vec![
+            HookBatchItem {
+                url: "http://h/hook?event=user-prompt-submit&agent=claude-code".into(),
+                body: serde_json::json!({"session_id":"batch-purged", "prompt":"late"}),
+            },
+            HookBatchItem {
+                url: "http://h/hook?event=user-prompt-submit&agent=claude-code".into(),
+                body: serde_json::json!({"session_id":"batch-live", "prompt":"valid"}),
+            },
+        ];
+        let response = handle_hook_batch(
+            State(state.clone()),
+            None,
+            None,
+            None,
+            HeaderMap::new(),
+            Json(items),
+        )
+        .await
+        .into_response();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let ack: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            ack["results"],
+            serde_json::json!([{ "index": 0, "outcome": "dropped_invalid" }, { "index": 1, "outcome": "stored" }])
+        );
+        assert_eq!(ack["accepted"], 2, "both contiguous entries are cleared");
+        assert!(ack.get("failed_index").is_none() || ack["failed_index"].is_null());
+        assert_eq!(state.reader.find_session_scope(purged).await.unwrap(), None);
+        assert!(
+            state
+                .reader
+                .observations_for_session(purged)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(state.ingest_metrics.snapshot().failed, 0);
+    }
+
     #[tokio::test]
     async fn async_processing_classifies_replay_and_missing_end_without_new_writes() {
         let tmp = TempDir::new().unwrap();
