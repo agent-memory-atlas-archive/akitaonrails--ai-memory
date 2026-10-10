@@ -868,6 +868,11 @@ fn installed_hook_names(agent_arg: &str, canonical_agent: &str, hooks: &[&str]) 
         )
         .unwrap();
     }
+    std::fs::write(
+        tmp.path().join("bundle/hooks/_lib.sh"),
+        "# shared helper sourced by every event script\n",
+    )
+    .unwrap();
     let archive = tmp.path().join("ai-memory-hooks.tar.gz");
     let status = Command::new("tar")
         .arg("-czf")
@@ -925,6 +930,10 @@ fn installed_hook_names(agent_arg: &str, canonical_agent: &str, hooks: &[&str]) 
         "installer failed: stdout={} stderr={}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        destination.join("_lib.sh").is_file(),
+        "the shared helper must land beside the agent directories"
     );
     let installed = destination.join(canonical_agent);
     let mut names = std::fs::read_dir(&installed)
