@@ -14,10 +14,15 @@ that stalls every query before falling back to the original order.
 The reranker prompt, though, is already a scoring rubric: grade each
 candidate 1.0 (direct answer) / 0.7 (same topic) / 0.3 (tangential) /
 0.0 (unrelated). A judge endpoint that scores a fixed rubric answers the
-same question without autoregressive decoding. The adapter in
-[`docs/examples/jev-reranker-adapter/jev_rerank_shim.py`](examples/jev-reranker-adapter/jev_rerank_shim.py)
-sits between ai-memory and the provider, translates exactly that request
-into one batched Jev `score` call, and proxies everything else unchanged.
+same question without autoregressive decoding. The rubric adapter
+described here sits between ai-memory and the provider, translates exactly
+that request into one batched Jev `score` call, and proxies everything else
+unchanged. Its script, `jev_rerank_shim.py`, is no longer in the tree (it
+was removed in commit `e45db18a`; recover it with
+`git show 311fe87f:docs/examples/jev-reranker-adapter/jev_rerank_shim.py`).
+The adapter that ships under
+[`docs/examples/jev-reranker-adapter/`](examples/jev-reranker-adapter/) is
+the [choice-contrastive variant](#choice-contrastive-variant).
 
 ## How it works
 
@@ -72,7 +77,7 @@ Description=ai-memory Jev reranker adapter
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/python3 /opt/ai-memory/ops/jev_rerank_shim.py
+ExecStart=/usr/bin/python3 /opt/ai-memory/ops/jev_rerank_shim_choice.py
 Environment=JEV_URL=http://127.0.0.1:18095/v1/systemone
 Environment=UPSTREAM=http://127.0.0.1:8000
 Environment=LISTEN=127.0.0.1:18097
@@ -91,13 +96,14 @@ AI_MEMORY_LLM_BASE_URL=http://127.0.0.1:18097/v1
 AI_MEMORY_RERANKER=llm
 ```
 
-To run the choice-contrastive variant instead, point `ExecStart` at
-`jev_rerank_shim_choice.py`; reranker requests then log
-`jev-choice N candidates in X.XXXs`. Everything else (env, unit,
-provider config) is identical.
+The unit runs the shipped choice-contrastive variant. To run the rubric
+adapter instead, recover `jev_rerank_shim.py` from git history and point
+`ExecStart` at it. Everything else (env, unit, provider config) is
+identical.
 
 Verify the split with `journalctl -u <unit>`: reranker requests log
-`jev N candidates in X.XXXs`, everything else is silent (proxied).
+`jev-choice N candidates in X.XXXs` (the rubric adapter logs
+`jev N candidates in X.XXXs`), everything else is silent (proxied).
 
 ## Benchmarks
 
