@@ -26,8 +26,8 @@
      (see CONTRIBUTING.md "Versioning and deprecation policy"). -->
 
 - [ ] **Patch**: bug fix, no new surface
-- [ ] **Minor**: additive: new flag/subcommand/MCP tool/config key,
-      new agent harness or provider
+- [ ] **Minor**: additive (new flag/subcommand/MCP tool/config key,
+      new agent harness or provider)
 - [ ] **Major (breaking)**: on-disk format, removed/renamed surface, or
       breaking MCP schema change, called out in "What changed" above
 
